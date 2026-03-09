@@ -118,6 +118,7 @@ func (m *Manager) Connect(deviceID, address string) error {
 	}
 
 	dialer := &net.Dialer{Timeout: 3 * time.Second}
+
 	conn, err := tls.DialWithDialer(dialer, "tcp", address, m.clientTLS)
 	if err != nil {
 		return fmt.Errorf("TLS dial failed: %w", err)
@@ -328,30 +329,12 @@ func (m *Manager) receiveBinaryFile(conn net.Conn, name string, size int64) erro
 }
 
 func getDownloadPath(filename string) (string, error) {
-	var downloadDir string
-
-	switch runtime.GOOS {
-	case "darwin":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		downloadDir = filepath.Join(home, "Downloads")
-	case "windows":
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		downloadDir = filepath.Join(home, "Downloads")
-	default: // linux
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", err
-		}
-		downloadDir = filepath.Join(home, "Downloads")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
 	}
+	downloadDir := filepath.Join(home, "Downloads")
 
-	// Ensure directory exists
 	if err := os.MkdirAll(downloadDir, 0755); err != nil {
 		return "", err
 	}
