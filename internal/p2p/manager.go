@@ -56,6 +56,7 @@ func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, lo
 	}
 }
 
+// TODO remove callback methods
 // SetOnMessage sets the callback for incoming messages
 func (m *Manager) SetOnMessage(callback func(*Message)) {
 	m.onMessage = callback

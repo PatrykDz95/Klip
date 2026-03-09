@@ -3,9 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
-	"ghostclip/internal/clipboard"
-	"ghostclip/internal/p2p"
-	"ghostclip/internal/security"
+	"klip/internal/clipboard"
+	"klip/internal/p2p"
+	"klip/internal/security"
 	"log/slog"
 	"os"
 	"runtime"
@@ -27,6 +27,9 @@ type Application struct {
 
 	clipboardClearCancel context.CancelFunc
 	clipboardClearMu     sync.Mutex
+
+	paused   bool
+	pausedMu sync.RWMutex
 }
 
 func NewApplication(iconData []byte) *Application {
@@ -41,8 +44,8 @@ func NewApplication(iconData []byte) *Application {
 
 func (app *Application) OnReady() {
 	systray.SetIcon(app.iconData)
-	systray.SetTitle("Ghostclip")
-	systray.SetTooltip("Ghostclip - Starting...")
+	systray.SetTitle("Klip")
+	systray.SetTooltip("Klip - Starting...")
 
 	app.buildMenu()
 	go app.startBackend()
@@ -53,7 +56,7 @@ func (app *Application) OnExit() {
 		app.cancel()
 	}
 	if app.logger != nil {
-		app.logger.Info("Ghostclip application stopped")
+		app.logger.Info("Klip application stopped")
 	}
 }
 
@@ -70,7 +73,7 @@ func (app *Application) startBackend() {
 
 	deviceID := generateDeviceID()
 
-	app.logger.Info("Starting Ghostclip",
+	app.logger.Info("Starting Klip",
 		"device", cfg.DeviceName,
 		"device_id", deviceID,
 		"os", runtime.GOOS,
@@ -88,10 +91,10 @@ func (app *Application) startBackend() {
 	}
 
 	app.updateStatus("Running")
-	systray.SetTooltip("Ghostclip - Ready")
+	systray.SetTooltip("Klip - Ready")
 	app.updatePeerMenu()
 
-	app.logger.Info("Ghostclip started successfully")
+	app.logger.Info("Klip started successfully")
 }
 
 func (app *Application) initLogger(verbose bool) error {
@@ -180,3 +183,8 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 
 	return nil
 }
+
+//func (app *Application) pauseService()
+//{
+//
+//}

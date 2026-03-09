@@ -15,7 +15,7 @@ const (
 )
 
 // Magic number to identify file transfer data
-const FileTransferMagic = 0x47435446 // "GCTF" - GhostClip Transfer File
+const FileTransferMagic = 0x47435446 // "GCTF" - Klip Transfer File
 
 type Message struct {
 	Type      string    `json:"type"`

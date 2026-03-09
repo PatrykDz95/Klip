@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ghostclip/internal/p2p"
+	"klip/internal/p2p"
 
 	"github.com/gen2brain/beeep"
 	"github.com/sqweek/dialog"

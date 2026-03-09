@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"ghostclip/internal/p2p"
+	"klip/internal/p2p"
 
 	"github.com/getlantern/systray"
 )
@@ -24,26 +24,49 @@ func (app *Application) buildMenu() {
 	app.ui.status.Disable()
 
 	app.ui.devices = systray.AddMenuItem("Devices: 0", "Connected devices")
-
 	systray.AddSeparator()
-
-	mAbout := systray.AddMenuItem("About Ghostclip", "About this application")
-
+	paused := systray.AddMenuItem("Pause syncing", "Pause clipboard syncing")
 	systray.AddSeparator()
-	mQuit := systray.AddMenuItem("Quit", "Exit Ghostclip")
+	mAbout := systray.AddMenuItem("About Klip", "About this application")
+	systray.AddSeparator()
+	mQuit := systray.AddMenuItem("Quit", "Exit Klip")
 
-	go app.handleMenuClicks(mAbout, mQuit)
+	go app.handleMenuClicks(paused, mAbout, mQuit)
 }
 
-func (app *Application) handleMenuClicks(mAbout, mQuit *systray.MenuItem) {
+func (app *Application) handleMenuClicks(paused, mAbout, mQuit *systray.MenuItem) {
 	for {
 		select {
+		case <-paused.ClickedCh:
+			app.togglePaused(paused)
 		case <-mAbout.ClickedCh:
 			app.showAbout()
 		case <-mQuit.ClickedCh:
 			systray.Quit()
 		}
 	}
+}
+
+func (app *Application) togglePaused(paused *systray.MenuItem) {
+	if app.isPaused() {
+		paused.SetTitle("Pause syncing")
+		app.setPaused(false)
+	} else {
+		paused.SetTitle("Resume syncing")
+		app.setPaused(true)
+	}
+}
+
+func (app *Application) setPaused(v bool) {
+	app.pausedMu.Lock()
+	app.paused = v
+	app.pausedMu.Unlock()
+}
+
+func (app *Application) isPaused() bool {
+	app.pausedMu.RLock()
+	defer app.pausedMu.RUnlock()
+	return app.paused
 }
 
 func (app *Application) updateStatus(status string) {
@@ -76,13 +99,13 @@ func (app *Application) updateDevicesTitle(count int) {
 	switch count {
 	case 0:
 		title = "Devices: 0 (searching...)"
-		tooltip = "Ghostclip - Searching for devices"
+		tooltip = "Klip - Searching for devices"
 	case 1:
 		title = "Devices: 1 connected"
-		tooltip = "Ghostclip - 1 device connected"
+		tooltip = "Klip - 1 device connected"
 	default:
 		title = fmt.Sprintf("Devices: %d connected", count)
-		tooltip = fmt.Sprintf("Ghostclip - %d devices connected", count)
+		tooltip = fmt.Sprintf("Klip - %d devices connected", count)
 	}
 
 	app.ui.devices.SetTitle(title)
@@ -145,7 +168,8 @@ func (app *Application) handlePeerClick(ctx context.Context, deviceID string, it
 	}
 }
 
+// TODO: implement showing maybe a window with info about the app instead of just printing to console
 func (app *Application) showAbout() {
 	app.logger.Info("About clicked")
-	fmt.Printf("Ghostclip Secure P2P clipboard sync\n")
+	fmt.Printf("Klip Secure P2P clipboard sync\n")
 }

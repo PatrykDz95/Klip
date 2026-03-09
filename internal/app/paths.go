@@ -23,21 +23,21 @@ func getCertDir() string {
 	if err != nil {
 		return ".clipboard-sync/certs"
 	}
-	return filepath.Join(home, ".clipboard-sync", "certs")
+	return filepath.Join(home, ".klip-sync", "certs")
 }
 
 func getLogPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "ghostclip.log"
+		return "klip.log"
 	}
 
-	logDir := filepath.Join(home, ".clipboard-sync")
+	logDir := filepath.Join(home, ".klip-sync")
 	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return "ghostclip.log"
+		return "klip.log"
 	}
 
-	return filepath.Join(logDir, "ghostclip.log")
+	return filepath.Join(logDir, "klip.log")
 }
 
 func getReceivedFilesDir() string {
@@ -45,7 +45,7 @@ func getReceivedFilesDir() string {
 	if err != nil {
 		return "received-files"
 	}
-	return filepath.Join(home, "Ghostclip", "Received Files")
+	return filepath.Join(home, "Klip", "Received Files")
 }
 
 func generateDeviceID() string {

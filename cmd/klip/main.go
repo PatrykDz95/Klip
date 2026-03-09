@@ -2,8 +2,8 @@ package main
 
 import (
 	_ "embed"
-	"ghostclip/internal/app"
 	"io"
+	"klip/internal/app"
 	"log"
 
 	"github.com/getlantern/systray"

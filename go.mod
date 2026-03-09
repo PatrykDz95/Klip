@@ -1,4 +1,4 @@
-module ghostclip
+module klip
 
 go 1.25.0
 

@@ -2,13 +2,13 @@ package app
 
 import (
 	"context"
-	"ghostclip/internal/p2p"
+	"klip/internal/p2p"
 	"time"
 )
 
 // handles incoming clipboard sync messages
 func (app *Application) handleClipboardSync(msg *p2p.Message) {
-	if msg.Type != p2p.MsgTypeSync {
+	if msg.Type != p2p.MsgTypeSync || app.isPaused() {
 		return
 	}
 
@@ -23,6 +23,10 @@ func (app *Application) handleClipboardSync(msg *p2p.Message) {
 
 func (app *Application) startClipboardMonitoring() error {
 	return app.clipboard.Watch(func(content string) {
+		if app.isPaused() {
+			return
+		}
+
 		app.logger.Info("Local clipboard changed", "size", len(content))
 		app.p2pMgr.BroadcastClipBoard(content)
 
