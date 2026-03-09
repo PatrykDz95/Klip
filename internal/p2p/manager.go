@@ -26,6 +26,8 @@ type Manager struct {
 	serverTLS  *tls.Config
 	clientTLS  *tls.Config
 	logger     *slog.Logger
+	listener   net.Listener
+	listenerMu sync.Mutex
 
 	onFileReceive FileReceiveCallback
 }
@@ -95,8 +97,7 @@ func (m *Manager) Listen() error {
 			)
 
 			go func() {
-				err := m.handleConnection(tlsConn, false)
-				if err != nil {
+				if err := m.handleConnection(tlsConn, false); err != nil {
 					m.logger.Error("Connection handling error", "error", err)
 				}
 			}()
@@ -109,8 +110,8 @@ func (m *Manager) Listen() error {
 // Connect establishes a TLS connection to a peer
 func (m *Manager) Connect(deviceID, address string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	_, exists := m.peers[deviceID]
+	m.mu.Unlock()
 
 	if exists {
 		return nil // already connected
