@@ -10,6 +10,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/getlantern/systray"
 )
@@ -36,8 +37,7 @@ func NewApplication(iconData []byte) *Application {
 	return &Application{
 		iconData: iconData,
 		ui: &UI{
-			peerMenuItems:   make(map[string]*systray.MenuItem),
-			peerCancelFuncs: make(map[string]context.CancelFunc),
+			peers: make(map[string]peerEntry),
 		},
 	}
 }
@@ -90,7 +90,7 @@ func (app *Application) startBackend() {
 		return
 	}
 
-	app.updateStatus("Running")
+	//app.updateStatus("Running")
 	systray.SetTooltip("Klip - Ready")
 	app.updatePeerMenu()
 
@@ -141,6 +141,7 @@ func (app *Application) initializeComponents(cfg *Config, deviceID string) error
 
 	app.p2pMgr.SetOnMessage(app.handleClipboardSync)
 	app.p2pMgr.SetOnFileReceive(app.handleIncomingFile)
+	app.hideStatus()
 
 	return nil
 }
@@ -181,10 +182,33 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 		}
 	}()
 
+	go func() {
+		for p := range app.p2pMgr.Progress {
+			if p.Done {
+				app.updateStatus(fmt.Sprintf("%s: 100%%", p.FileName))
+				time.Sleep(5 * time.Second)
+				app.hideStatus()
+			} else {
+				pct := float64(p.Transferred) / float64(p.Total) * 100
+				app.updateStatus(fmt.Sprintf("%s: %.0f%%", p.FileName, pct))
+			}
+		}
+	}()
+
+	// TODO: look into if there is a better way
+	// Periodically refresh peer menu
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-app.ctx.Done():
+				return
+			case <-ticker.C:
+				app.updatePeerMenu()
+			}
+		}
+	}()
+
 	return nil
 }
-
-//func (app *Application) pauseService()
-//{
-//
-//}

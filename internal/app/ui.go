@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"klip/internal/p2p"
@@ -10,13 +11,18 @@ import (
 	"github.com/getlantern/systray"
 )
 
-type UI struct {
-	status  *systray.MenuItem
-	devices *systray.MenuItem
+type peerEntry struct {
+	item   *systray.MenuItem
+	cancel context.CancelFunc
+}
 
-	mu              sync.RWMutex
-	peerMenuItems   map[string]*systray.MenuItem
-	peerCancelFuncs map[string]context.CancelFunc
+type UI struct {
+	status        *systray.MenuItem
+	devices       *systray.MenuItem
+	noDevicesItem *systray.MenuItem
+
+	mu    sync.Mutex
+	peers map[string]peerEntry
 }
 
 func (app *Application) buildMenu() {
@@ -75,27 +81,78 @@ func (app *Application) updateStatus(status string) {
 	}
 }
 
+func (app *Application) hideStatus() {
+	if app.ui.status != nil {
+		app.ui.status.Hide()
+	}
+}
+
 func (app *Application) updatePeerMenu() {
 	if app.ui.devices == nil || app.p2pMgr == nil {
 		return
 	}
 
 	peers := app.p2pMgr.GetPeers()
-	count := len(peers)
+	sort.Slice(peers, func(i, j int) bool {
+		return peers[i].DeviceID < peers[j].DeviceID
+	})
 
-	app.updateDevicesTitle(count)
-	app.clearPeerMenuItems()
+	app.ui.mu.Lock()
+	defer app.ui.mu.Unlock()
 
-	if count == 0 {
-		app.addNoDevicesItem()
-	} else {
-		app.addPeerItems(peers)
+	app.removeDisconnectedPeers(peers)
+	app.addNewPeers(peers)
+	app.syncNoDevicesPlaceholder(len(peers))
+	app.updateDevicesTitle(len(peers))
+}
+
+// removeDisconnectedPeers hides menu items for peers that are no longer connected.
+func (app *Application) removeDisconnectedPeers(connected []p2p.PeerInfo) {
+	connectedSet := make(map[string]struct{}, len(connected))
+	for _, p := range connected {
+		connectedSet[p.DeviceID] = struct{}{}
+	}
+
+	for id, entry := range app.ui.peers {
+		if _, ok := connectedSet[id]; !ok {
+			entry.cancel()
+			entry.item.Hide()
+			delete(app.ui.peers, id)
+		}
+	}
+}
+
+// addNewPeers adds menu items for peers not yet in the menu.
+func (app *Application) addNewPeers(peers []p2p.PeerInfo) {
+	for _, peer := range peers {
+		if _, exists := app.ui.peers[peer.DeviceID]; exists {
+			continue
+		}
+
+		tooltip := fmt.Sprintf("Send file to %s (%s)", peer.DeviceName, peer.Address)
+		item := app.ui.devices.AddSubMenuItem(peer.DeviceName, tooltip)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		app.ui.peers[peer.DeviceID] = peerEntry{item: item, cancel: cancel}
+
+		go app.handlePeerClick(ctx, peer.DeviceID, item)
+	}
+}
+
+// syncNoDevicesPlaceholder shows or hides the "No devices found" placeholder.
+func (app *Application) syncNoDevicesPlaceholder(peerCount int) {
+	if peerCount == 0 && app.ui.noDevicesItem == nil {
+		item := app.ui.devices.AddSubMenuItem("No devices found", "")
+		item.Disable()
+		app.ui.noDevicesItem = item
+	} else if peerCount > 0 && app.ui.noDevicesItem != nil {
+		app.ui.noDevicesItem.Hide()
+		app.ui.noDevicesItem = nil
 	}
 }
 
 func (app *Application) updateDevicesTitle(count int) {
 	var title, tooltip string
-
 	switch count {
 	case 0:
 		title = "Devices: 0 (searching...)"
@@ -107,53 +164,8 @@ func (app *Application) updateDevicesTitle(count int) {
 		title = fmt.Sprintf("Devices: %d connected", count)
 		tooltip = fmt.Sprintf("Klip - %d devices connected", count)
 	}
-
 	app.ui.devices.SetTitle(title)
 	systray.SetTooltip(tooltip)
-}
-
-func (app *Application) clearPeerMenuItems() {
-	app.ui.mu.Lock()
-	defer app.ui.mu.Unlock()
-
-	// Cancel all running goroutines first
-	for deviceID, cancel := range app.ui.peerCancelFuncs {
-		cancel()
-		delete(app.ui.peerCancelFuncs, deviceID)
-	}
-
-	// Then clear menu items
-	for deviceID, item := range app.ui.peerMenuItems {
-		item.Hide()
-		delete(app.ui.peerMenuItems, deviceID)
-	}
-}
-
-// adds a disabled "no devices" placeholder
-func (app *Application) addNoDevicesItem() {
-	noDevices := app.ui.devices.AddSubMenuItem("No devices found", "")
-	noDevices.Disable()
-
-	app.ui.mu.Lock()
-	defer app.ui.mu.Unlock()
-	app.ui.peerMenuItems["_no_devices"] = noDevices
-}
-
-func (app *Application) addPeerItems(peers []p2p.PeerInfo) {
-	for _, peer := range peers {
-		tooltip := fmt.Sprintf("Send file to %s (%s)", peer.DeviceName, peer.Address)
-		item := app.ui.devices.AddSubMenuItem(peer.DeviceName, tooltip)
-
-		// Create cancellable context for this peer's goroutine
-		ctx, cancel := context.WithCancel(context.Background())
-
-		app.ui.mu.Lock()
-		app.ui.peerMenuItems[peer.DeviceID] = item
-		app.ui.peerCancelFuncs[peer.DeviceID] = cancel
-		app.ui.mu.Unlock()
-
-		go app.handlePeerClick(ctx, peer.DeviceID, item)
-	}
 }
 
 func (app *Application) handlePeerClick(ctx context.Context, deviceID string, item *systray.MenuItem) {

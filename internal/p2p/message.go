@@ -24,7 +24,16 @@ type Message struct {
 	Payload   *Payload  `json:"payload,omitempty"`
 }
 
+type FileProgress struct {
+	FileName    string
+	Transferred int64
+	Total       int64
+	Done        bool
+}
+
 type Payload struct {
+	ListenPort int `json:"listen_port,omitempty"`
+
 	// MsgTypeHello device info
 	DeviceName string `json:"device_name,omitempty"`
 	OS         string `json:"os,omitempty"`

@@ -29,6 +29,8 @@ type Manager struct {
 	listener   net.Listener
 	listenerMu sync.Mutex
 
+	Progress chan FileProgress
+
 	onFileReceive FileReceiveCallback
 }
 
@@ -54,7 +56,8 @@ func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, lo
 			InsecureSkipVerify: true,
 			MinVersion:         tls.VersionTLS13,
 		},
-		logger: logger,
+		logger:   logger,
+		Progress: make(chan FileProgress, 10),
 	}
 }
 
@@ -67,6 +70,13 @@ func (m *Manager) SetOnMessage(callback func(*Message)) {
 // set callback for incoming file offers
 func (m *Manager) SetOnFileReceive(callback FileReceiveCallback) {
 	m.onFileReceive = callback
+}
+
+func (m *Manager) HasPeer(deviceID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.peers[deviceID]
+	return exists
 }
 
 // Listen starts the TLS listener for incoming connections
@@ -140,6 +150,7 @@ func (m *Manager) newHelloMessage() *Message {
 		DeviceID:  m.deviceID,
 		Timestamp: time.Now(),
 		Payload: &Payload{
+			ListenPort: m.port,
 			DeviceName: m.deviceName,
 			OS:         runtime.GOOS,
 		},
@@ -229,11 +240,17 @@ func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.E
 		return fmt.Errorf("invalid hello: missing required fields")
 	}
 
+	host, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+	listenPort := msg.Payload.ListenPort
+	if listenPort == 0 {
+		listenPort = m.port // fallback
+	}
+
 	peer := &Peer{
 		DeviceID:   msg.DeviceID,
 		DeviceName: msg.Payload.DeviceName,
 		OS:         msg.Payload.OS,
-		Address:    conn.RemoteAddr().String(),
+		Address:    fmt.Sprintf("%s:%d", host, listenPort),
 		Conn:       conn,
 		LastSeen:   time.Now(),
 	}
@@ -302,8 +319,14 @@ func (m *Manager) receiveBinaryFileToPath(reader io.Reader, name string, expecte
 		return fmt.Errorf("size mismatch in header: got %d, expected %d", size, expectedSize)
 	}
 
+	pr := &progressReader{
+		reader:     reader,
+		total:      size,
+		fileName:   name,
+		progressCh: m.Progress,
+	}
 	// Read exact number of bytes
-	written, err := io.CopyN(f, reader, size)
+	written, err := io.CopyN(f, pr, size)
 	if err != nil {
 		return fmt.Errorf("copy failed: %w (got %d/%d)", err, written, size)
 	}
@@ -311,6 +334,8 @@ func (m *Manager) receiveBinaryFileToPath(reader io.Reader, name string, expecte
 	if written != size {
 		return fmt.Errorf("size mismatch: wrote %d, expected %d", written, size)
 	}
+
+	pr.SendDone()
 
 	if err := f.Sync(); err != nil {
 		m.logger.Warn("Failed to sync file", "error", err)
@@ -430,10 +455,18 @@ func (m *Manager) SendFile(peerID string, filePath string) error {
 	}
 
 	// Send raw file data
-	written, err := io.Copy(dataConn, file)
+	pr := &progressReader{
+		reader:     file,
+		total:      info.Size(),
+		fileName:   filepath.Base(filePath),
+		progressCh: m.Progress,
+	}
+	written, err := io.Copy(dataConn, pr)
 	if err != nil {
 		return fmt.Errorf("failed to send file data: %w", err)
 	}
+
+	pr.SendDone()
 
 	m.logger.Info("File sent", "name", filepath.Base(filePath), "size", written)
 	return nil
