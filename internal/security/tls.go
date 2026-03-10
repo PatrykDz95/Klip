@@ -100,15 +100,6 @@ func GenerateSelfSignedCert(certDir, deviceID string) (*tls.Certificate, error) 
 	return &cert, nil
 }
 
-func CreateTLSConfig(cert *tls.Certificate) *tls.Config {
-	return &tls.Config{
-		Certificates:       []tls.Certificate{*cert},
-		ClientAuth:         tls.RequireAnyClientCert,
-		MinVersion:         tls.VersionTLS13,
-		InsecureSkipVerify: true,
-	}
-}
-
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
