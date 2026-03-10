@@ -345,14 +345,6 @@ func (m *Manager) receiveBinaryFileToPath(reader io.Reader, name string, expecte
 	return nil
 }
 
-func (m *Manager) receiveBinaryFile(conn net.Conn, name string, size int64) error {
-	savePath, err := getDownloadPath(name)
-	if err != nil {
-		return fmt.Errorf("failed to get download path: %w", err)
-	}
-	return m.receiveBinaryFileToPath(conn, name, size, savePath)
-}
-
 func getDownloadPath(filename string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
