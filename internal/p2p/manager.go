@@ -1,15 +1,12 @@
 package p2p
 
 import (
-	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
-	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -62,12 +59,10 @@ func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, lo
 }
 
 // TODO remove callback methods
-// SetOnMessage sets the callback for incoming messages
 func (m *Manager) SetOnMessage(callback func(*Message)) {
 	m.onMessage = callback
 }
 
-// set callback for incoming file offers
 func (m *Manager) SetOnFileReceive(callback FileReceiveCallback) {
 	m.onFileReceive = callback
 }
@@ -79,56 +74,66 @@ func (m *Manager) HasPeer(deviceID string) bool {
 	return exists
 }
 
-// Listen starts the TLS listener for incoming connections
+func (m *Manager) GetPeers() []PeerInfo {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	peers := make([]PeerInfo, 0, len(m.peers))
+	for _, peer := range m.peers {
+		peers = append(peers, peer.Info())
+	}
+	return peers
+}
+
+// Listen starts the TLS listener for incoming connections.
 func (m *Manager) Listen() error {
 	listener, err := tls.Listen("tcp", fmt.Sprintf(":%d", m.port), m.serverTLS)
 	if err != nil {
 		return fmt.Errorf("failed to start TLS listener: %w", err)
 	}
 
-	m.logger.Info("TLS listener started",
-		"port", m.port,
-		"tls_version", "1.3",
-	)
+	m.listenerMu.Lock()
+	m.listener = listener
+	m.listenerMu.Unlock()
 
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				m.logger.Error("Accept error", "error", err)
-				continue
-			}
+	m.logger.Info("TLS listener started", "port", m.port)
 
-			tlsConn := conn.(*tls.Conn)
-
-			m.logger.Debug("TLS connection accepted",
-				"remote", conn.RemoteAddr(),
-				"cipher", cipherSuiteName(tlsConn.ConnectionState().CipherSuite),
-			)
-
-			go func() {
-				if err := m.handleConnection(tlsConn, false); err != nil {
-					m.logger.Error("Connection handling error", "error", err)
-				}
-			}()
-		}
-	}()
-
+	go m.acceptLoop(listener)
 	return nil
 }
 
-// Connect establishes a TLS connection to a peer
-func (m *Manager) Connect(deviceID, address string) error {
-	m.mu.Lock()
-	_, exists := m.peers[deviceID]
-	m.mu.Unlock()
+func (m *Manager) acceptLoop(listener net.Listener) {
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+			m.logger.Error("Accept error", "error", err)
+			continue
+		}
 
-	if exists {
-		return nil // already connected
+		tlsConn := conn.(*tls.Conn)
+		m.logger.Debug("TLS connection accepted",
+			"remote", conn.RemoteAddr(),
+			"cipher", cipherSuiteName(tlsConn.ConnectionState().CipherSuite),
+		)
+
+		go func() {
+			if err := m.handleConnection(tlsConn, false); err != nil {
+				m.logger.Error("Connection handling error", "error", err)
+			}
+		}()
+	}
+}
+
+// Connect establishes a TLS connection to a peer.
+func (m *Manager) Connect(deviceID, address string) error {
+	if m.HasPeer(deviceID) {
+		return nil
 	}
 
 	dialer := &net.Dialer{Timeout: 3 * time.Second}
-
 	conn, err := tls.DialWithDialer(dialer, "tcp", address, m.clientTLS)
 	if err != nil {
 		return fmt.Errorf("TLS dial failed: %w", err)
@@ -142,19 +147,6 @@ func (m *Manager) Connect(deviceID, address string) error {
 	)
 
 	return m.handleConnection(conn, true)
-}
-
-func (m *Manager) newHelloMessage() *Message {
-	return &Message{
-		Type:      MsgTypeHello,
-		DeviceID:  m.deviceID,
-		Timestamp: time.Now(),
-		Payload: &Payload{
-			ListenPort: m.port,
-			DeviceName: m.deviceName,
-			OS:         runtime.GOOS,
-		},
-	}
 }
 
 func (m *Manager) handleConnection(conn net.Conn, initiator bool) error {
@@ -188,62 +180,19 @@ func (m *Manager) handleConnection(conn net.Conn, initiator bool) error {
 	}
 }
 
-func (m *Manager) handleFileOffer(conn net.Conn, msg *Message) error {
-	fileName := msg.Payload.FileName
-	fileSize := msg.Payload.Size
-
-	m.logger.Info("File offer received", "file", fileName, "size", fileSize)
-
-	senderName := m.getSenderName(msg.DeviceID)
-	accepted, savePath := m.resolveFileAcceptance(senderName, fileName, fileSize)
-
-	if !accepted {
-		m.logger.Info("File transfer rejected by user", "file", fileName)
-		return nil
-	}
-
-	m.logger.Info("File transfer accepted", "file", fileName, "save_path", savePath)
-
-	if err := m.sendFileAccept(conn, ""); err != nil {
-		return fmt.Errorf("failed to send acceptance: %w", err)
-	}
-
-	return m.receiveBinaryFileToPath(conn, fileName, fileSize, savePath)
-}
-
-func (m *Manager) getSenderName(deviceID string) string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	if peer, exists := m.peers[deviceID]; exists {
-		return peer.DeviceName
-	}
-	return "Unknown"
-}
-
-func (m *Manager) resolveFileAcceptance(senderName, fileName string, fileSize int64) (bool, string) {
-	if m.onFileReceive != nil {
-		return m.onFileReceive(senderName, fileName, fileSize)
-	}
-
-	m.logger.Warn("No file receive callback set - auto-accepting")
-	savePath, err := getDownloadPath(fileName)
-	if err != nil {
-		m.logger.Error("Failed to get download path", "error", err)
-		return false, ""
-	}
-	return true, savePath
-}
-
 func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.Encoder, decoder *json.Decoder, initiator bool) error {
 	if msg.DeviceID == "" || msg.Payload == nil || msg.Payload.DeviceName == "" {
 		return fmt.Errorf("invalid hello: missing required fields")
 	}
 
-	host, _, _ := net.SplitHostPort(conn.RemoteAddr().String())
+	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
+	if err != nil {
+		return fmt.Errorf("failed to parse remote address: %w", err)
+	}
+
 	listenPort := msg.Payload.ListenPort
 	if listenPort == 0 {
-		listenPort = m.port // fallback
+		listenPort = m.port
 	}
 
 	peer := &Peer{
@@ -277,7 +226,6 @@ func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.E
 		}
 	}
 
-	// Message loop
 	for {
 		var mMsg Message
 		if err := decoder.Decode(&mMsg); err != nil {
@@ -290,231 +238,27 @@ func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.E
 	}
 }
 
-func (m *Manager) receiveBinaryFileToPath(reader io.Reader, name string, expectedSize int64, savePath string) error {
-	m.logger.Info("Starting file download", "file", name, "size", expectedSize, "path", savePath)
-
-	dir := filepath.Dir(savePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	f, err := os.Create(savePath)
-	if err != nil {
-		return fmt.Errorf("failed to create file: %w", err)
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			m.logger.Error("Failed to close file", "error", err)
-		}
-	}()
-
-	// Read binary file header [magic:4][size:8]
-	size, err := ReadFileHeader(reader)
-	if err != nil {
-		return fmt.Errorf("failed to read file header: %w", err)
-	}
-
-	// Verify size matches what was offered
-	if size != expectedSize {
-		return fmt.Errorf("size mismatch in header: got %d, expected %d", size, expectedSize)
-	}
-
-	pr := &progressReader{
-		reader:     reader,
-		total:      size,
-		fileName:   name,
-		progressCh: m.Progress,
-	}
-	// Read exact number of bytes
-	written, err := io.CopyN(f, pr, size)
-	if err != nil {
-		return fmt.Errorf("copy failed: %w (got %d/%d)", err, written, size)
-	}
-
-	if written != size {
-		return fmt.Errorf("size mismatch: wrote %d, expected %d", written, size)
-	}
-
-	pr.SendDone()
-
-	if err := f.Sync(); err != nil {
-		m.logger.Warn("Failed to sync file", "error", err)
-	}
-
-	m.logger.Info("File saved successfully", "bytes", written, "path", savePath)
-	return nil
-}
-
-func getDownloadPath(filename string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	downloadDir := filepath.Join(home, "Downloads")
-
-	if err := os.MkdirAll(downloadDir, 0755); err != nil {
-		return "", err
-	}
-
-	// Handle duplicate filenames
-	savePath := filepath.Join(downloadDir, filename)
-	if _, err := os.Stat(savePath); err == nil {
-		// File exists, add timestamp
-		ext := filepath.Ext(filename)
-		base := filename[:len(filename)-len(ext)]
-		savePath = filepath.Join(downloadDir, fmt.Sprintf("%s_%d%s", base, time.Now().Unix(), ext))
-	}
-
-	return savePath, nil
-}
-
-func (m *Manager) sendFileAccept(conn net.Conn, fileID string) error {
-	encoder := json.NewEncoder(conn)
-	acceptMsg := &Message{
-		Type:      MsgTypeFileAccept,
+func (m *Manager) newHelloMessage() *Message {
+	return &Message{
+		Type:      MsgTypeHello,
 		DeviceID:  m.deviceID,
 		Timestamp: time.Now(),
 		Payload: &Payload{
-			ContentHash: fileID,
+			ListenPort: m.port,
+			DeviceName: m.deviceName,
+			OS:         runtime.GOOS,
 		},
-	}
-	return encoder.Encode(acceptMsg)
-}
-
-func (m *Manager) SendFile(peerID string, filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			m.logger.Error("Failed to close file", "error", err)
-		}
-	}()
-
-	info, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to stat file: %w", err)
-	}
-
-	m.mu.RLock()
-	peer, ok := m.peers[peerID]
-	m.mu.RUnlock()
-	if !ok {
-		return fmt.Errorf("peer %s offline", peerID)
-	}
-
-	// New connection for file transfer
-	dialer := &net.Dialer{Timeout: 5 * time.Second}
-	dataConn, err := tls.DialWithDialer(dialer, "tcp", peer.Address, m.clientTLS)
-	if err != nil {
-		return fmt.Errorf("failed to open data channel: %w", err)
-	}
-	defer func() {
-		if err := dataConn.Close(); err != nil {
-			m.logger.Debug("Failed to close data connection", "error", err)
-		}
-	}()
-
-	// Send file offer (JSON)
-	encoder := json.NewEncoder(dataConn)
-	msg := &Message{
-		Type:     MsgTypeFileOffer,
-		DeviceID: m.deviceID,
-		Payload: &Payload{
-			FileName: filepath.Base(filePath),
-			Size:     info.Size(),
-		},
-	}
-
-	if err := encoder.Encode(msg); err != nil {
-		return fmt.Errorf("failed to send file offer: %w", err)
-	}
-
-	// Wait for acceptance (JSON)
-	decoder := json.NewDecoder(dataConn)
-	var resp Message
-	if err := decoder.Decode(&resp); err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-	if resp.Type != MsgTypeFileAccept {
-		return fmt.Errorf("transfer rejected: %s", resp.Type)
-	}
-
-	// Send binary file header [magic:4][size:8]
-	if err := WriteFileHeader(dataConn, info.Size()); err != nil {
-		return fmt.Errorf("failed to write file header: %w", err)
-	}
-
-	// Send raw file data
-	pr := &progressReader{
-		reader:     file,
-		total:      info.Size(),
-		fileName:   filepath.Base(filePath),
-		progressCh: m.Progress,
-	}
-	written, err := io.Copy(dataConn, pr)
-	if err != nil {
-		return fmt.Errorf("failed to send file data: %w", err)
-	}
-
-	pr.SendDone()
-
-	m.logger.Info("File sent", "name", filepath.Base(filePath), "size", written)
-	return nil
-}
-
-func (m *Manager) BroadcastClipBoard(content string) {
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
-
-	// Deduplication
-	if hash == m.lastHash {
-		return
-	}
-	m.lastHash = hash
-
-	msg := &Message{
-		Type:      MsgTypeSync,
-		DeviceID:  m.deviceID,
-		Timestamp: time.Now(),
-		Payload: &Payload{
-			ClipboardContent: content,
-			ContentHash:      hash,
-		},
-	}
-
-	m.mu.RLock()
-	peerCount := len(m.peers)
-	for _, peer := range m.peers {
-		go func(p *Peer) {
-			encoder := json.NewEncoder(p.Conn)
-			if err := encoder.Encode(msg); err != nil {
-				m.logger.Error("Broadcast failed",
-					"peer", p.DeviceName,
-					"error", err,
-				)
-			}
-		}(peer)
-	}
-	m.mu.RUnlock()
-
-	if peerCount > 0 {
-		m.logger.Debug("Clipboard broadcasted (encrypted)",
-			"peer_count", peerCount,
-			"size", len(content),
-		)
 	}
 }
 
-func (m *Manager) GetPeers() []PeerInfo {
+func (m *Manager) getSenderName(deviceID string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	peers := make([]PeerInfo, 0, len(m.peers))
-	for _, peer := range m.peers {
-		peers = append(peers, peer.Info())
+	if peer, exists := m.peers[deviceID]; exists {
+		return peer.DeviceName
 	}
-	return peers
+	return "Unknown"
 }
 
 func tlsVersionName(version uint16) string {
