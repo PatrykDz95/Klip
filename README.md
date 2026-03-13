@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="150" height="150" src="cmd/klip/assets/klip-256.png" alt="Klip Logo">
+  <img width="150" height="150" src="cmd/klip/assets/klip-fixed-256.png" alt="Klip Logo">
 </p>
 <h1 align="center">Klip</h1>
 <p align="center">
