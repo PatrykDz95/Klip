@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"klip/internal/p2p"
 	"time"
 )
@@ -18,7 +19,7 @@ func (app *Application) handleClipboardSync(msg *p2p.Message) {
 		return
 	}
 
-	app.logger.Info("Clipboard synced", "size", len(content))
+	app.logger.Info("Clipboard synced", "size", formatBytes(len(content)))
 }
 
 func (app *Application) startClipboardMonitoring() error {
@@ -27,7 +28,7 @@ func (app *Application) startClipboardMonitoring() error {
 			return
 		}
 
-		app.logger.Info("Local clipboard changed", "size", len(content))
+		app.logger.Info("Local clipboard changed", "size", formatBytes(len(content)))
 		app.p2pMgr.BroadcastClipBoard(content)
 
 		app.cancelClipboardClear()
@@ -47,6 +48,17 @@ func (app *Application) cancelClipboardClear() {
 	if app.clipboardClearCancel != nil {
 		app.clipboardClearCancel()
 		app.clipboardClearCancel = nil
+	}
+}
+
+func formatBytes(b int) string {
+	switch {
+	case b >= 1024*1024:
+		return fmt.Sprintf("%.1fMB", float64(b)/(1024*1024))
+	case b >= 1024:
+		return fmt.Sprintf("%.1fKB", float64(b)/1024)
+	default:
+		return fmt.Sprintf("%dB", b)
 	}
 }
 

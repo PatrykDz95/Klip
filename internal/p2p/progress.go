@@ -42,3 +42,7 @@ func (pr *progressReader) SendDone() {
 		Done:        true,
 	}
 }
+
+func copyBufferN(dst io.Writer, src io.Reader, n int64, buf []byte) (int64, error) {
+	return io.CopyBuffer(dst, io.LimitReader(src, n), buf)
+}
