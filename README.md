@@ -1,11 +1,20 @@
 <p align="center">
-  <img src="cmd/klip/assets/klip-256.png" width="128" alt="Klip logo">
-</p>
-
-<h1 align="center">Klip</h1>
-
-<p align="center">
-  Secure peer-to-peer clipboard sharing and file transfer across devices on your local network.
+  <img width="150" height="150" src="cmd/klip/assets/klip-256.png" alt="Klip Logo">
+  <h1 align="center">Klip</h1>
+  <p align="center">
+    Secure peer-to-peer clipboard sharing and file transfer across devices on your local network.
+  </p>
+  <p align="center">
+    <a href="https://github.com/PatrykDz95/Klip">
+      <img src="https://img.shields.io/static/v1?label=Language&message=Go&color=00ADD8" />
+    </a>
+    <a href="https://github.com/PatrykDz95/Klip/blob/main/LICENSE">
+      <img src="https://img.shields.io/static/v1?label=License&message=MIT&color=000" />
+    </a>
+    <a href="https://github.com/PatrykDz95/Klip">
+      <img src="https://img.shields.io/static/v1?label=Security&message=TLS%201.3&color=2ea44f" />
+    </a>
+  </p>
 </p>
 
 Klip runs in the system tray and automatically syncs your clipboard between all connected devices. Copy on one machine, paste on another. It also supports sending files directly to a connected peer.
@@ -82,7 +91,3 @@ internal/
 - Certificates are **ECDSA P-256**, auto-generated and stored in `~/.klip-sync/certs/`
 - Clipboard data is never sent unencrypted
 - File transfers require explicit acceptance from the receiving device
-
-## License
-
-MIT
