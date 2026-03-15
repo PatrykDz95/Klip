@@ -43,8 +43,8 @@ go install klip/cmd/klip@latest
 Or build from source:
 
 ```bash
-git clone https://github.com/ghostclip/ghostclip.git
-cd ghostclip
+git clone https://github.com/PatrykDz95/Klip.git
+cd klip
 go build -o klip ./cmd/klip
 ```
 
