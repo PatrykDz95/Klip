@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,14 +18,16 @@ type Discovery struct {
 	deviceID   string
 	deviceName string
 	port       int
+	logger     *slog.Logger
 	onPeer     func(deviceID, address string)
 }
 
-func NewDiscovery(deviceID, deviceName string, port int, onPeer func(string, string)) *Discovery {
+func NewDiscovery(deviceID, deviceName string, port int, logger *slog.Logger, onPeer func(string, string)) *Discovery {
 	return &Discovery{
 		deviceID:   deviceID,
 		deviceName: deviceName,
 		port:       port,
+		logger:     logger,
 		onPeer:     onPeer,
 	}
 }
@@ -99,11 +102,14 @@ func (d *Discovery) scan() {
 		}
 	}()
 
-	mdns.Query(&mdns.QueryParam{
+	if err := mdns.Query(&mdns.QueryParam{
 		Service: ServiceName,
 		Timeout: 3 * time.Second,
 		Entries: entriesCh,
-	})
+	}); err != nil {
+		d.logger.Error("mDNS query failed", "error", err)
+	}
+	close(entriesCh)
 }
 
 func extractField(fields []string, key string) string {
