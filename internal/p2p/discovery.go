@@ -15,21 +15,26 @@ const (
 	ServiceName = "_clipboard._tcp"
 )
 
+type DiscoveredPeer struct {
+	DeviceID string
+	Address  string
+}
+
 type Discovery struct {
 	deviceID   string
 	deviceName string
 	port       int
 	logger     *slog.Logger
-	onPeer     func(deviceID, address string)
+	Peers      chan DiscoveredPeer
 }
 
-func NewDiscovery(deviceID, deviceName string, port int, logger *slog.Logger, onPeer func(string, string)) *Discovery {
+func NewDiscovery(deviceID, deviceName string, port int, logger *slog.Logger) *Discovery {
 	return &Discovery{
 		deviceID:   deviceID,
 		deviceName: deviceName,
 		port:       port,
 		logger:     logger,
-		onPeer:     onPeer,
+		Peers:      make(chan DiscoveredPeer),
 	}
 }
 
@@ -74,21 +79,21 @@ func (d *Discovery) Advertise(ctx context.Context) error {
 	return nil
 }
 
-func (d *Discovery) Discover(ctx context.Context) error {
+func (d *Discovery) Discover(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case <-ticker.C:
-			d.scan()
+			d.scan(ctx)
 		}
 	}
 }
 
-func (d *Discovery) scan() {
+func (d *Discovery) scan(ctx context.Context) {
 	entriesCh := make(chan *mdns.ServiceEntry, 10)
 
 	go func() {
@@ -104,9 +109,10 @@ func (d *Discovery) scan() {
 			}
 
 			addr := fmt.Sprintf("%s:%d", entry.AddrV4, entry.Port)
-
-			if d.onPeer != nil {
-				d.onPeer(deviceID, addr)
+			select {
+			case d.Peers <- DiscoveredPeer{DeviceID: deviceID, Address: addr}:
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()

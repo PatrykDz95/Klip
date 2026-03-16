@@ -163,7 +163,6 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 		cfg.DeviceName,
 		cfg.Port,
 		app.logger,
-		app.handlePeerDiscovered,
 	)
 
 	go func() {
@@ -172,9 +171,16 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 		}
 	}()
 
+	go app.discovery.Discover(app.ctx)
+
 	go func() {
-		if err := app.discovery.Discover(app.ctx); err != nil {
-			app.logger.Error("Discovery error", "error", err)
+		for {
+			select {
+			case <-app.ctx.Done():
+				return
+			case peer := <-app.discovery.Peers:
+				app.handlePeerDiscovered(peer.DeviceID, peer.Address)
+			}
 		}
 	}()
 

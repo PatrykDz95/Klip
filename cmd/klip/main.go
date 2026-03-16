@@ -20,10 +20,11 @@ func main() {
 	// Suppress mdns warnings
 	log.SetOutput(io.Discard)
 
-	icon := iconDataPng
-
+	var icon []byte
 	if runtime.GOOS == "windows" {
 		icon = iconIco
+	} else {
+		icon = iconDataPng
 	}
 
 	application := app.NewApplication(icon)
