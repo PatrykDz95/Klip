@@ -5,6 +5,7 @@ import (
 	"io"
 	"klip/internal/app"
 	"log"
+	"runtime"
 
 	"github.com/getlantern/systray"
 )
@@ -12,10 +13,19 @@ import (
 //go:embed assets/klip-fixed-256.png
 var iconDataPng []byte
 
+//go:embed assets/klip-512.ico
+var iconIco []byte
+
 func main() {
 	// Suppress mdns warnings
 	log.SetOutput(io.Discard)
 
-	application := app.NewApplication(iconDataPng)
+	icon := iconDataPng
+
+	if runtime.GOOS == "windows" {
+		icon = iconIco
+	}
+
+	application := app.NewApplication(icon)
 	systray.Run(application.OnReady, application.OnExit)
 }
