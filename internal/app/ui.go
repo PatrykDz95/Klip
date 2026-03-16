@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"klip/internal/p2p"
 
@@ -78,10 +79,12 @@ func (app *Application) isPaused() bool {
 func (app *Application) updateStatus(status string) {
 	if app.ui.status != nil {
 		app.ui.status.SetTitle(status)
+		app.ui.status.Show()
 	}
 }
 
-func (app *Application) hideStatus() {
+func (app *Application) hideStatusAfter(seconds time.Duration) {
+	time.Sleep(seconds * time.Second)
 	if app.ui.status != nil {
 		app.ui.status.Hide()
 	}

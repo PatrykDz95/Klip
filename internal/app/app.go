@@ -141,7 +141,7 @@ func (app *Application) initializeComponents(cfg *Config, deviceID string) error
 
 	app.p2pMgr.SetOnMessage(app.handleClipboardSync)
 	app.p2pMgr.SetOnFileReceive(app.handleIncomingFile)
-	app.hideStatus()
+	app.hideStatusAfter(5)
 
 	return nil
 }
@@ -156,6 +156,7 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 		deviceID,
 		cfg.DeviceName,
 		cfg.Port,
+		app.logger,
 		app.handlePeerDiscovered,
 	)
 
@@ -186,8 +187,7 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 		for p := range app.p2pMgr.Progress {
 			if p.Done {
 				app.updateStatus(fmt.Sprintf("%s: 100%%", p.FileName))
-				time.Sleep(5 * time.Second)
-				app.hideStatus()
+				app.hideStatusAfter(5)
 			} else {
 				pct := float64(p.Transferred) / float64(p.Total) * 100
 				app.updateStatus(fmt.Sprintf("%s: %.0f%%", p.FileName, pct))

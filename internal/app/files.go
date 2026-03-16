@@ -80,6 +80,9 @@ func (app *Application) sendFileToDevice(deviceID string) {
 		return
 	}
 
+	app.updateStatus("File sent: " + filepath.Base(filePath))
+	app.hideStatusAfter(10)
+
 	app.logger.Info("File sent successfully", "file", filepath.Base(filePath))
 }
 
