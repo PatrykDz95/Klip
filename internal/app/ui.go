@@ -3,6 +3,8 @@ package app
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -33,24 +35,43 @@ func (app *Application) buildMenu() {
 	app.ui.devices = systray.AddMenuItem("Devices: 0", "Connected devices")
 	systray.AddSeparator()
 	paused := systray.AddMenuItem("Pause syncing", "Pause clipboard syncing")
+	mOpenFiles := systray.AddMenuItem("Open received files", "Open the received files folder")
 	systray.AddSeparator()
 	mAbout := systray.AddMenuItem("About Klip", "About this application")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Exit Klip")
 
-	go app.handleMenuClicks(paused, mAbout, mQuit)
+	go app.handleMenuClicks(paused, mOpenFiles, mAbout, mQuit)
 }
 
-func (app *Application) handleMenuClicks(paused, mAbout, mQuit *systray.MenuItem) {
+func (app *Application) handleMenuClicks(paused, mOpenFiles, mAbout, mQuit *systray.MenuItem) {
 	for {
 		select {
 		case <-paused.ClickedCh:
 			app.togglePaused(paused)
+		case <-mOpenFiles.ClickedCh:
+			app.openReceivedFilesDir()
 		case <-mAbout.ClickedCh:
 			app.showAbout()
 		case <-mQuit.ClickedCh:
 			systray.Quit()
 		}
+	}
+}
+
+func (app *Application) openReceivedFilesDir() {
+	dir := getReceivedFilesDir()
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer", dir)
+	case "darwin":
+		cmd = exec.Command("open", dir)
+	default:
+		cmd = exec.Command("xdg-open", dir)
+	}
+	if err := cmd.Start(); err != nil {
+		app.logger.Error("Failed to open received files folder", "error", err)
 	}
 }
 

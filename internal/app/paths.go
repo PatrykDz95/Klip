@@ -45,7 +45,7 @@ func getReceivedFilesDir() string {
 	if err != nil {
 		return "received-files"
 	}
-	return filepath.Join(home, "Klip", "Received Files")
+	return filepath.Join(home, "Klip", "received-files")
 }
 
 func generateDeviceID() string {

@@ -129,6 +129,12 @@ func (app *Application) initializeComponents(cfg *Config, deviceID string) error
 		return fmt.Errorf("certificate generation failed: %w", err)
 	}
 
+	// Ensure received files directory exists
+	err = os.MkdirAll(getReceivedFilesDir(), 0755)
+	if err != nil {
+		app.logger.Error("Failed to create received files directory", "error", err)
+	}
+
 	app.updateStatus("Initializing clipboard")
 	cb, err := clipboard.New()
 	if err != nil {
