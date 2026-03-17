@@ -81,3 +81,7 @@ func (c *linuxClipboard) Watch(onChange func(content string)) error {
 
 	return nil
 }
+
+func (c *linuxClipboard) GetFiles() ([]string, error) {
+	return nil, nil
+}

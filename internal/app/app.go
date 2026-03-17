@@ -136,7 +136,7 @@ func (app *Application) initializeComponents(cfg *Config, deviceID string) error
 	}
 
 	app.updateStatus("Initializing clipboard")
-	cb, err := clipboard.New()
+	cb, err := clipboard.New(app.logger)
 	if err != nil {
 		return fmt.Errorf("clipboard initialization failed: %w", err)
 	}

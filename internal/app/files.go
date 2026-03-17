@@ -2,11 +2,9 @@ package app
 
 import (
 	"fmt"
+	"klip/internal/p2p"
 	"os"
 	"path/filepath"
-	"strings"
-
-	"klip/internal/p2p"
 
 	"github.com/gen2brain/beeep"
 	"github.com/sqweek/dialog"
@@ -58,44 +56,43 @@ func (app *Application) sendFileToDevice(deviceID string) {
 		return
 	}
 
-	filePath, err := app.getFilePathFromClipboard()
-	if err != nil {
-		app.logger.Warn("Clipboard does not contain a valid file path", "error", err)
+	filePaths := app.resolveFilesToSend()
+	if len(filePaths) == 0 {
 		return
 	}
 
-	fileInfo, err := os.Stat(filePath)
-	if err != nil {
-		app.logger.Warn("File not found", "path", filePath, "error", err)
-		return
-	}
-
-	app.logger.Info("Sending file",
-		"file", filepath.Base(filePath),
-		"size", fileInfo.Size(),
-		"to", targetPeer.DeviceName)
-
-	if err := app.p2pMgr.SendFile(deviceID, filePath); err != nil {
-		app.logger.Error("Failed to send file", "error", err)
-		return
-	}
-
-	app.updateStatus("File sent: " + filepath.Base(filePath))
-	app.hideStatusAfter(10)
-
-	app.logger.Info("File sent successfully", "file", filepath.Base(filePath))
+	go app.sendFiles(deviceID, targetPeer.DeviceName, filePaths)
 }
 
-func (app *Application) getFilePathFromClipboard() (string, error) {
-	content, err := app.clipboard.Get()
+func (app *Application) resolveFilesToSend() []string {
+	files, err := app.clipboard.GetFiles()
 	if err != nil {
-		return "", fmt.Errorf("failed to get clipboard: %w", err)
+		app.logger.Debug("Clipboard files check failed", "error", err)
 	}
 
-	filePath := strings.TrimSpace(content)
-	filePath = strings.Trim(filePath, "\"") // Remove quotes (Windows adds them)
+	if len(files) > 0 {
+		return files
+	}
 
-	return filePath, nil
+	filePath, err := dialog.File().Title("Select file to send").Load()
+	if err != nil {
+		app.logger.Debug("File picker cancelled")
+		return nil
+	}
+
+	return []string{filePath}
+}
+
+func (app *Application) sendFiles(deviceID, deviceName string, filePaths []string) {
+	for _, f := range filePaths {
+		app.logger.Info("Sending file", "file", filepath.Base(f), "to", deviceName)
+		if err := app.p2pMgr.SendFile(deviceID, f); err != nil {
+			app.logger.Error("Failed to send file", "file", f, "error", err)
+			continue
+		}
+		app.updateStatus("File sent: " + filepath.Base(f))
+	}
+	app.hideStatusAfter(10)
 }
 
 func findPeer(peers []p2p.PeerInfo, deviceID string) *p2p.PeerInfo {

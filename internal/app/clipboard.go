@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// handles incoming clipboard sync messages
 func (app *Application) handleClipboardSync(msg *p2p.Message) {
 	if msg.Type != p2p.MsgTypeSync || app.isPaused() {
 		return
@@ -37,10 +36,8 @@ func (app *Application) startClipboardMonitoring() error {
 			go app.scheduleClearClipboard(5 * time.Minute)
 		}
 	})
-
 }
 
-// cancels the scheduled clipboard clear
 func (app *Application) cancelClipboardClear() {
 	app.clipboardClearMu.Lock()
 	defer app.clipboardClearMu.Unlock()
@@ -62,11 +59,9 @@ func formatBytes(b int) string {
 	}
 }
 
-// clears clipboard after specified duration
 func (app *Application) scheduleClearClipboard(delay time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Store cancel function
 	app.clipboardClearMu.Lock()
 	app.clipboardClearCancel = cancel
 	app.clipboardClearMu.Unlock()
@@ -79,11 +74,9 @@ func (app *Application) scheduleClearClipboard(delay time.Duration) {
 			app.logger.Error("Failed to clear clipboard", "error", err)
 			return
 		}
-
 		app.logger.Info("Clipboard cleared automatically")
 
 	case <-ctx.Done():
-		// Cancelled (user changed clipboard before timeout)
 		app.logger.Debug("Clipboard clear cancelled")
 	}
 }

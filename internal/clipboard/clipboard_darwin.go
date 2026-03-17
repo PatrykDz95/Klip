@@ -67,3 +67,7 @@ func (c *darwinClipboard) Watch(onChange func(content string)) error {
 
 	return nil
 }
+
+func (c *darwinClipboard) GetFiles() ([]string, error) {
+	return nil, nil
+}
