@@ -43,6 +43,9 @@ jobs:
         if: matrix.goos == 'linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev
 
+      - name: Tidy modules
+        run: go mod tidy
+
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
