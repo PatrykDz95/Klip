@@ -34,7 +34,7 @@ func (app *Application) buildMenu() {
 
 	app.ui.devices = systray.AddMenuItem("Devices: 0", "Connected devices")
 	systray.AddSeparator()
-	paused := systray.AddMenuItem("Pause syncing", "Pause clipboard syncing")
+	paused := systray.AddMenuItem("Pause clipboard syncing", "Don't sync clipboard with other devices")
 	mOpenFiles := systray.AddMenuItem("Open received files", "Open the received files folder")
 	systray.AddSeparator()
 	mAbout := systray.AddMenuItem("About Klip", "About this application")
@@ -77,10 +77,10 @@ func (app *Application) openReceivedFilesDir() {
 
 func (app *Application) togglePaused(paused *systray.MenuItem) {
 	if app.isPaused() {
-		paused.SetTitle("Pause syncing")
+		paused.SetTitle("Pause clipboard syncing")
 		app.setPaused(false)
 	} else {
-		paused.SetTitle("Resume syncing")
+		paused.SetTitle("Resume clipboard syncing")
 		app.setPaused(true)
 	}
 }
@@ -204,8 +204,17 @@ func (app *Application) handlePeerClick(ctx context.Context, deviceID string, it
 	}
 }
 
-// TODO: implement showing maybe a window with info about the app instead of just printing to console
 func (app *Application) showAbout() {
-	app.logger.Info("About clicked")
-	fmt.Printf("Klip Secure P2P clipboard sync\n")
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", "https://klip-it.app")
+	case "darwin":
+		cmd = exec.Command("open", "https://klip-it.app")
+	default:
+		cmd = exec.Command("xdg-open", "https://klip-it.app")
+	}
+	if err := cmd.Start(); err != nil {
+		app.logger.Error("Failed to open browser", "error", err)
+	}
 }
