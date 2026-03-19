@@ -42,17 +42,21 @@ jobs:
       - name: Tidy modules
         run: go mod tidy
 
-      - name: Build
+      - name: Build (Windows)
+        if: matrix.goos == 'windows'
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 1
-        run: |
-          LDFLAGS="-s -w"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            LDFLAGS="$LDFLAGS -H windowsgui"
-          fi
-          go build -ldflags "$LDFLAGS" -o klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/klip
+        run: go build -ldflags "-s -w -H windowsgui" -o klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/klip
+
+      - name: Build (Unix)
+        if: matrix.goos != 'windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: go build -ldflags "-s -w" -o klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/klip
 
       - name: Package (Windows)
         if: matrix.goos == 'windows'
