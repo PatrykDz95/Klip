@@ -52,6 +52,16 @@ go build -o klip ./cmd/klip
 
 Klip requires `xclip` or `xsel` for clipboard access on Linux.
 
+## Windows Defender / Antivirus Notice
+Klip is unsigned, so your antivirus may flag it.
+This is a false positive. 
+The app is open source, you can review the code and build it yourself:
+
+```bash
+git clone https://github.com/PatrykDz95/Klip
+cd Klip
+go build -ldflags "-s -w" -o klip.exe ./cmd/klip
+```
 ## Usage
 
 ```bash
