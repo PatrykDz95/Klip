@@ -25,10 +25,6 @@ jobs:
             goos: darwin
             goarch: arm64
             ext: ""
-          - os: macos-13
-            goos: darwin
-            goarch: amd64
-            ext: ""
 
     runs-on: ${{ matrix.os }}
 
