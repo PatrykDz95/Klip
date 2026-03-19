@@ -49,11 +49,20 @@ jobs:
           CGO_ENABLED: 1
         run: go build -ldflags "-s -w" -o klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/klip
 
+      - name: Package (Windows)
+        if: matrix.goos == 'windows'
+        run: Compress-Archive -Path klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} -DestinationPath klip-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+        shell: pwsh
+
+      - name: Package (Unix)
+        if: matrix.goos != 'windows'
+        run: tar czf klip-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: klip-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+          path: klip-${{ matrix.goos }}-${{ matrix.goarch }}.*
 
   release:
     needs: build
@@ -64,6 +73,12 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum klip-* > checksums.txt
+          cat checksums.txt
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
