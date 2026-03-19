@@ -5,6 +5,7 @@ package clipboard
 import (
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"time"
@@ -12,9 +13,13 @@ import (
 
 type darwinClipboard struct {
 	lastHash [32]byte
+	logger   *slog.Logger
 }
 
-func newClipboard() (Clipboard, error) {
+func newClipboard(logger *slog.Logger) (Clipboard, error) {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	if _, err := exec.LookPath("pbpaste"); err != nil {
 		return nil, fmt.Errorf("pbpaste not found: %w", err)
 	}
@@ -22,7 +27,7 @@ func newClipboard() (Clipboard, error) {
 		return nil, fmt.Errorf("pbcopy not found: %w", err)
 	}
 
-	return &darwinClipboard{}, nil
+	return &darwinClipboard{logger: logger}, nil
 }
 
 func (c *darwinClipboard) Get() (string, error) {
