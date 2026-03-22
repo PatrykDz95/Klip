@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: .exe
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: ""
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            ext: ""
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Install Linux dependencies
+        if: matrix.goos == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev
+
+      - name: Tidy modules
+        run: go mod tidy
+
+      - name: Build (Windows)
+        if: matrix.goos == 'windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: go build -ldflags "-s -w -H windowsgui" -o klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/klip
+
+      - name: Build (Unix)
+        if: matrix.goos != 'windows'
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 1
+        run: go build -ldflags "-s -w" -o klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} ./cmd/klip
+
+      - name: Package (Windows)
+        if: matrix.goos == 'windows'
+        run: Compress-Archive -Path klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} -DestinationPath klip-${{ matrix.goos }}-${{ matrix.goarch }}.zip
+        shell: pwsh
+
+      - name: Package (Unix)
+        if: matrix.goos != 'windows'
+        run: tar czf klip-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: klip-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: klip-${{ matrix.goos }}-${{ matrix.goarch }}.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum klip-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*
