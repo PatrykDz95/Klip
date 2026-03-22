@@ -39,19 +39,26 @@ Klip runs in the system tray and automatically syncs your clipboard between all 
 4. File transfers use a separate data channel with offer/accept protocol and progress tracking
 
 ## Installation
+
+### Linux
 ```bash
-go install github.com/PatrykDz95/Klip/cmd/klip@latest
+curl -sL https://github.com/PatrykDz95/Klip/releases/latest/download/klip-linux-amd64.tar.gz | tar xz && sudo mv klip-linux-amd64 /usr/local/bin/klip
 ```
 
-Or build from source:
+Dependencies:
+```bash
+sudo apt install wl-clipboard xclip libgtk-3-0 libayatana-appindicator3-1
+```
+
+### macOS / Windows
+Download the latest release from the [Releases page](https://github.com/PatrykDz95/Klip/releases/latest).
+
+### Build from source
 ```bash
 git clone https://github.com/PatrykDz95/Klip.git
 cd Klip
 go build -o klip ./cmd/klip
 ```
-
-### Linux dependencies
-Klip requires `xclip` or `xsel` for clipboard access on Linux.
 
 ## Windows Defender / Antivirus Notice
 Klip is unsigned, so your antivirus may flag it as suspicious. This is a false positive — the app is open source and you can review or build it yourself:
@@ -78,7 +85,7 @@ klip -peer 192.168.1.100:9876
 
 Klip appears in your system tray. From there you can:
 - See connected devices
-- Send a file — copy the file path to clipboard, then click the device name in the tray menu
+- Send a file — click the device name in the tray menu and select a file
 - Pause/resume clipboard syncing
 
 ## Architecture
