@@ -66,8 +66,6 @@ xattr -cr /path/to/klip-darwin-arm64
 ```
 Then double-click as normal.
 
-Klip is fully open source — you can review the code or build it yourself if you prefer.
-
 ### Build from source
 ```bash
 git clone https://github.com/PatrykDz95/Klip.git
