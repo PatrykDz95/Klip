@@ -65,15 +65,6 @@ func (app *Application) sendFileToDevice(deviceID string) {
 }
 
 func (app *Application) resolveFilesToSend() []string {
-	files, err := app.clipboard.GetFiles()
-	if err != nil {
-		app.logger.Debug("Clipboard files check failed", "error", err)
-	}
-
-	if len(files) > 0 {
-		return files
-	}
-
 	filePath, err := dialog.File().Title("Select file to send").Load()
 	if err != nil {
 		app.logger.Debug("File picker cancelled")

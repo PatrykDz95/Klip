@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -108,82 +107,4 @@ func (c *linuxClipboard) Watch(onChange func(content string)) error {
 		}
 	}
 	return nil
-}
-
-func (c *linuxClipboard) GetFiles() ([]string, error) {
-	switch c.backend {
-	case backendWayland:
-		return c.getFilesWayland()
-	case backendXclip:
-		return c.getFilesXclip()
-	case backendXsel:
-		return nil, nil // xsel doesn't support MIME types
-	}
-	return nil, nil
-}
-
-func (c *linuxClipboard) getFilesWayland() ([]string, error) {
-	out, err := exec.Command("wl-paste", "--list-types").Output()
-	if err != nil {
-		return nil, nil
-	}
-
-	types := string(out)
-	var mimeType string
-	switch {
-	case strings.Contains(types, "text/uri-list"):
-		mimeType = "text/uri-list"
-	case strings.Contains(types, "x-special/gnome-copied-files"):
-		mimeType = "x-special/gnome-copied-files"
-	default:
-		return nil, nil
-	}
-
-	out, err = exec.Command("wl-paste", "--type", mimeType).Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file list from clipboard: %w", err)
-	}
-
-	return parseURIList(string(out)), nil
-}
-
-func (c *linuxClipboard) getFilesXclip() ([]string, error) {
-	targetsOut, err := exec.Command("xclip", "-selection", "clipboard", "-t", "TARGETS", "-o").Output()
-	if err != nil {
-		return nil, nil
-	}
-
-	targets := string(targetsOut)
-	var mimeType string
-	switch {
-	case strings.Contains(targets, "text/uri-list"):
-		mimeType = "text/uri-list"
-	case strings.Contains(targets, "x-special/gnome-copied-files"):
-		mimeType = "x-special/gnome-copied-files"
-	default:
-		return nil, nil
-	}
-
-	out, err := exec.Command("xclip", "-selection", "clipboard", "-t", mimeType, "-o").Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file list from clipboard: %w", err)
-	}
-
-	return parseURIList(string(out)), nil
-}
-
-func parseURIList(raw string) []string {
-	var files []string
-	for _, line := range strings.Split(raw, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || line == "copy" || line == "cut" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		u, err := url.Parse(line)
-		if err != nil || u.Scheme != "file" {
-			continue
-		}
-		files = append(files, u.Path)
-	}
-	return files
 }

@@ -72,38 +72,3 @@ func (c *darwinClipboard) Watch(onChange func(content string)) error {
 
 	return nil
 }
-
-func (c *darwinClipboard) GetFiles() ([]string, error) {
-	// osascript is always available on macOS — no external tools needed.
-	// «class furl» is the AppleScript type for file URLs (POSIX paths via coercion).
-	script := `
-				try
-					set theClip to the clipboard as «class furl»
-					set theFiles to {}
-					if class of theClip is list then
-						repeat with aFile in theClip
-							set end of theFiles to POSIX path of aFile
-						end repeat
-					else
-						set theFiles to {POSIX path of theClip}
-					end if
-					set AppleScript's text item delimiters to linefeed
-					theFiles as text
-				on error
-					""
-				end try`
-
-	out, err := exec.Command("osascript", "-e", script).Output()
-	if err != nil {
-		return nil, fmt.Errorf("osascript failed: %w", err)
-	}
-
-	var files []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" {
-			files = append(files, line)
-		}
-	}
-	return files, nil
-}
