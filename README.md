@@ -53,6 +53,21 @@ sudo apt install wl-clipboard xclip libgtk-3-0 libayatana-appindicator3-1
 ### macOS / Windows
 Download the latest release from the [Releases page](https://github.com/PatrykDz95/Klip/releases/latest).
 
+### macOS Gatekeeper Notice
+macOS may block Klip on first launch because it is not signed with an Apple Developer certificate. This is expected for open-source tools distributed outside the App Store.
+
+**To open it anyway:**
+
+Option 1 — right-click the binary and select **Open**, then confirm in the dialog.
+
+Option 2 — run this in Terminal after downloading:
+```bash
+xattr -cr /path/to/klip-darwin-arm64
+```
+Then double-click as normal.
+
+Klip is fully open source — you can review the code or build it yourself if you prefer.
+
 ### Build from source
 ```bash
 git clone https://github.com/PatrykDz95/Klip.git
