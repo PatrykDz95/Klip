@@ -23,6 +23,7 @@ type UI struct {
 	status        *systray.MenuItem
 	devices       *systray.MenuItem
 	noDevicesItem *systray.MenuItem
+	licenseItem   *systray.MenuItem
 
 	mu    sync.Mutex
 	peers map[string]peerEntry
@@ -31,26 +32,46 @@ type UI struct {
 func (app *Application) buildMenu() {
 	app.ui.status = systray.AddMenuItem("Starting...", "Current status")
 	app.ui.status.Disable()
+	mLicense := systray.AddMenuItem("", "")
+	app.ui.licenseItem = mLicense
+	systray.AddSeparator()
 
 	app.ui.devices = systray.AddMenuItem("Devices: 0", "Connected devices")
 	systray.AddSeparator()
-	paused := systray.AddMenuItem("Pause clipboard syncing", "Don't sync clipboard with other devices")
+	mPause := systray.AddMenuItem("Pause clipboard syncing", "Don't sync clipboard with other devices")
 	mOpenFiles := systray.AddMenuItem("Open received files", "Open the received files folder")
 	systray.AddSeparator()
 	mAbout := systray.AddMenuItem("About Klip", "About this application")
 	systray.AddSeparator()
 	mQuit := systray.AddMenuItem("Quit", "Exit Klip")
 
-	go app.handleMenuClicks(paused, mOpenFiles, mAbout, mQuit)
+	app.updateLicenseMenu()
+
+	go app.handleMenuClicks(mPause, mOpenFiles, mLicense, mAbout, mQuit)
 }
 
-func (app *Application) handleMenuClicks(paused, mOpenFiles, mAbout, mQuit *systray.MenuItem) {
+func (app *Application) updateLicenseMenu() {
+	if app.isPro() {
+		app.ui.licenseItem.SetTitle("⭐ Klip Pro")
+		app.ui.licenseItem.SetTooltip("Unlimited devices - Thank you for support!")
+	} else {
+		app.ui.licenseItem.SetTitle("⚡ Upgrade to Pro")
+		app.ui.licenseItem.SetTooltip("Unlock unlimited devices")
+	}
+}
+
+func (app *Application) handleMenuClicks(mPause, mOpenFiles, mLicense, mAbout, mQuit *systray.MenuItem) {
 	for {
 		select {
-		case <-paused.ClickedCh:
-			app.togglePaused(paused)
+		case <-mPause.ClickedCh:
+			app.togglePaused(mPause)
 		case <-mOpenFiles.ClickedCh:
 			app.openReceivedFilesDir()
+		case <-mLicense.ClickedCh:
+			if !app.isPro() {
+				app.activateLicense()
+			}
+			app.updateLicenseMenu()
 		case <-mAbout.ClickedCh:
 			app.showAbout()
 		case <-mQuit.ClickedCh:
@@ -95,6 +116,12 @@ func (app *Application) isPaused() bool {
 	app.pausedMu.RLock()
 	defer app.pausedMu.RUnlock()
 	return app.paused
+}
+
+func (app *Application) isPro() bool {
+	app.licenseMu.RLock()
+	defer app.licenseMu.RUnlock()
+	return app.license != nil
 }
 
 func (app *Application) updateStatus(status string) {

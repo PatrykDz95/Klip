@@ -8,7 +8,7 @@ import (
 )
 
 func (app *Application) handleClipboardSync(msg *p2p.Message) {
-	if msg.Type != p2p.MsgTypeSync || app.isPaused() {
+	if msg.Type != p2p.MsgTypeSync || app.isPaused() || app.isDeviceLimitBlocked() {
 		return
 	}
 
@@ -23,7 +23,7 @@ func (app *Application) handleClipboardSync(msg *p2p.Message) {
 
 func (app *Application) startClipboardMonitoring() error {
 	return app.clipboard.Watch(func(content string) {
-		if app.isPaused() {
+		if app.isPaused() || app.isDeviceLimitBlocked() {
 			return
 		}
 
