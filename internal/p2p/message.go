@@ -12,6 +12,7 @@ const (
 	MsgTypeSync       = "sync"
 	MsgTypeFileOffer  = "file_offer"
 	MsgTypeFileAccept = "file_accept"
+	MsgTypeFileReject = "file_reject"
 )
 
 // Magic number to identify file transfer data
@@ -44,6 +45,7 @@ type Payload struct {
 	// MsgTypeFileOffer
 	FileName    string `json:"file_name,omitempty"`
 	Size        int64  `json:"size,omitempty"`
+	IsFolder    bool   `json:"is_folder,omitempty"`
 	ContentHash string `json:"content_hash,omitempty"` // transfer ID
 }
 
