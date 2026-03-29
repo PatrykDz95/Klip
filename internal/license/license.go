@@ -6,15 +6,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
 
-const (
-	apiURL    = "https://api.lemonsqueezy.com/v1/licenses"
-	storeID   = 329375
-	productID = 928458
+var (
+	storeID   string
+	productID string
 )
+
+const apiURL = "https://api.lemonsqueezy.com/v1/licenses"
 
 type Client struct {
 	httpClient *http.Client
@@ -131,10 +133,20 @@ func (c *Client) post(endpoint string, data url.Values) (*APIResponse, error) {
 }
 
 func (c *Client) verifyProduct(resp *APIResponse) error {
-	if resp.Meta.StoreID != storeID {
+	storeIDInt, err := strconv.Atoi(storeID)
+	if err != nil {
+		return fmt.Errorf("invalid storeID configuration: %w", err)
+	}
+
+	productIDInt, err := strconv.Atoi(productID)
+	if err != nil {
+		return fmt.Errorf("invalid productID configuration: %w", err)
+	}
+
+	if resp.Meta.StoreID != storeIDInt {
 		return fmt.Errorf("invalid store ID: %d", resp.Meta.StoreID)
 	}
-	if resp.Meta.ProductID != productID {
+	if resp.Meta.ProductID != productIDInt {
 		return fmt.Errorf("invalid product ID: %d", resp.Meta.ProductID)
 	}
 	return nil
