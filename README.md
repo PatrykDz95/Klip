@@ -12,9 +12,6 @@
   <a href="https://github.com/PatrykDz95/Klip">
     <img src="https://img.shields.io/static/v1?label=Language&message=Go&color=00ADD8" />
   </a>
-  <a href="https://github.com/PatrykDz95/Klip/blob/main/LICENSE">
-    <img src="https://img.shields.io/static/v1?label=License&message=MIT&color=000" />
-  </a>
   <a href="https://github.com/PatrykDz95/Klip">
     <img src="https://img.shields.io/static/v1?label=Security&message=TLS%201.3&color=2ea44f" />
   </a>
