@@ -41,7 +41,10 @@ func (app *Application) buildMenu() {
 	app.ui.devices = systray.AddMenuItem("Devices: 0", "Connected devices")
 	systray.AddSeparator()
 	mPause := systray.AddMenuItem("Pause clipboard syncing", "Don't sync clipboard with other devices")
+	systray.AddSeparator()
 	mOpenFiles := systray.AddMenuItem("Open received files", "Open the received files folder")
+	systray.AddSeparator()
+	mAutostart := systray.AddMenuItem(autostartTitle(), "Start Klip when you log in")
 	systray.AddSeparator()
 	mAbout := systray.AddMenuItem("About Klip", "About this application")
 	systray.AddSeparator()
@@ -49,7 +52,7 @@ func (app *Application) buildMenu() {
 
 	app.updateLicenseMenu()
 
-	go app.handleMenuClicks(mPause, mOpenFiles, mLicense, mAbout, mQuit)
+	go app.handleMenuClicks(mPause, mOpenFiles, mAutostart, mLicense, mAbout, mQuit)
 }
 
 func (app *Application) updateLicenseMenu() {
@@ -62,13 +65,15 @@ func (app *Application) updateLicenseMenu() {
 	}
 }
 
-func (app *Application) handleMenuClicks(mPause, mOpenFiles, mLicense, mAbout, mQuit *systray.MenuItem) {
+func (app *Application) handleMenuClicks(mPause, mOpenFiles, mAutostart, mLicense, mAbout, mQuit *systray.MenuItem) {
 	for {
 		select {
 		case <-mPause.ClickedCh:
 			app.togglePaused(mPause)
 		case <-mOpenFiles.ClickedCh:
 			app.openReceivedFilesDir()
+		case <-mAutostart.ClickedCh:
+			app.toggleAutostart(mAutostart)
 		case <-mLicense.ClickedCh:
 			if !app.isPro() {
 				app.activateLicense()
@@ -231,6 +236,27 @@ func (app *Application) handlePeerClick(ctx context.Context, deviceID string, it
 			app.sendFileToDevice(deviceID)
 		}
 	}
+}
+
+func (app *Application) toggleAutostart(item *systray.MenuItem) {
+	var err error
+	if autostartEnabled() {
+		err = disableAutostart()
+	} else {
+		err = enableAutostart()
+	}
+	if err != nil {
+		app.logger.Error("Failed to toggle autostart", "error", err)
+		return
+	}
+	item.SetTitle(autostartTitle())
+}
+
+func autostartTitle() string {
+	if autostartEnabled() {
+		return "✓ Launch at startup"
+	}
+	return "Launch at startup"
 }
 
 func (app *Application) showAbout() {
