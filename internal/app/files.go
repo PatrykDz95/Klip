@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"klip/internal/file_picker"
 	"klip/internal/p2p"
 	"os"
 	"path/filepath"
@@ -11,9 +12,14 @@ import (
 )
 
 func (app *Application) handleIncomingFile(senderName, fileName string, fileSize int64) (bool, string) {
+	if app.isDeviceLimitBlocked() {
+		app.logger.Warn("Rejected incoming file: free device limit reached", "file", fileName)
+		return false, ""
+	}
+
 	app.playNotificationSound()
 
-	notificationTitle := "Incoming File Transfer"
+	notificationTitle := "Incoming Transfer"
 	notificationMsg := fmt.Sprintf("%s wants to send you:\n%s (%.2f MB)",
 		senderName, fileName, float64(fileSize)/(1024*1024))
 
@@ -21,18 +27,18 @@ func (app *Application) handleIncomingFile(senderName, fileName string, fileSize
 		app.logger.Warn("Failed to show notification", "error", err)
 	}
 
-	response := dialog.Message("%s wants to send you a file:\n\n%s\n\nSize: %.2f MB\n\nDo you want to accept?",
+	response := dialog.Message("%s wants to send you:\n\n%s\n\nSize: %.2f MB\n\nDo you want to accept?",
 		senderName, fileName, float64(fileSize)/(1024*1024)).
-		Title("Incoming File Transfer").
+		Title("Incoming Transfer").
 		YesNo()
 
 	if !response {
-		app.logger.Info("File transfer rejected by user", "file", fileName)
+		app.logger.Info("Transfer rejected by user", "name", fileName)
 		app.playRejectionSound()
 		return false, ""
 	}
 
-	app.logger.Info("File transfer accepted", "file", fileName)
+	app.logger.Info("Transfer accepted", "name", fileName)
 
 	receivedDir := getReceivedFilesDir()
 	if err := os.MkdirAll(receivedDir, 0755); err != nil {
@@ -41,13 +47,18 @@ func (app *Application) handleIncomingFile(senderName, fileName string, fileSize
 	}
 
 	savePath := filepath.Join(receivedDir, fileName)
-	app.logger.Info("File will be saved to", "path", savePath)
+	app.logger.Info("Will be saved to", "path", savePath)
 
 	return true, savePath
 }
 
 func (app *Application) sendFileToDevice(deviceID string) {
-	app.logger.Info("Preparing to send file", "device_id", deviceID)
+	if app.isDeviceLimitBlocked() {
+		dialog.Message("Free device limit reached. Upgrade to Klip Pro to send files.").Title("Klip").Error()
+		return
+	}
+
+	app.logger.Info("Preparing to send", "device_id", deviceID)
 
 	peers := app.p2pMgr.GetPeers()
 	targetPeer := findPeer(peers, deviceID)
@@ -56,22 +67,17 @@ func (app *Application) sendFileToDevice(deviceID string) {
 		return
 	}
 
-	filePaths := app.resolveFilesToSend()
-	if len(filePaths) == 0 {
+	result := file_picker.PickFileOrFolder("Select file or folder to send")
+	if result == nil {
+		app.logger.Debug("Picker cancelled")
 		return
 	}
 
-	go app.sendFiles(deviceID, targetPeer.DeviceName, filePaths)
-}
-
-func (app *Application) resolveFilesToSend() []string {
-	filePath, err := dialog.File().Title("Select file to send").Load()
-	if err != nil {
-		app.logger.Debug("File picker cancelled")
-		return nil
+	if result.IsDir {
+		go app.sendFolder(deviceID, targetPeer.DeviceName, result.Path)
+	} else {
+		go app.sendFiles(deviceID, targetPeer.DeviceName, []string{result.Path})
 	}
-
-	return []string{filePath}
 }
 
 func (app *Application) sendFiles(deviceID, deviceName string, filePaths []string) {
@@ -83,6 +89,19 @@ func (app *Application) sendFiles(deviceID, deviceName string, filePaths []strin
 		}
 		app.updateStatus("File sent: " + filepath.Base(f))
 	}
+	app.hideStatusAfter(10)
+}
+
+func (app *Application) sendFolder(deviceID, deviceName, folderPath string) {
+	folderName := filepath.Base(folderPath)
+	app.logger.Info("Sending folder", "folder", folderName, "to", deviceName)
+
+	if err := app.p2pMgr.SendFolder(deviceID, folderPath); err != nil {
+		app.logger.Error("Failed to send folder", "folder", folderName, "error", err)
+		return
+	}
+
+	app.updateStatus("Folder sent: " + folderName)
 	app.hideStatusAfter(10)
 }
 

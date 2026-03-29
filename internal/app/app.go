@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"klip/internal/clipboard"
+	"klip/internal/license"
 	"klip/internal/p2p"
 	"klip/internal/security"
 	"log/slog"
@@ -16,6 +17,7 @@ import (
 )
 
 type Application struct {
+	deviceID  string
 	logger    *slog.Logger
 	p2pMgr    *p2p.Manager
 	discovery *p2p.Discovery
@@ -31,6 +33,13 @@ type Application struct {
 
 	paused   bool
 	pausedMu sync.RWMutex
+
+	deviceLimitBlocked bool
+	deviceLimitMu      sync.RWMutex
+
+	license       *license.StoredLicense
+	licenseMu     sync.RWMutex
+	licenseClient *license.Client
 }
 
 func NewApplication(iconData []byte) *Application {
@@ -71,13 +80,16 @@ func (app *Application) startBackend() {
 		cfg.DeviceName = getDefaultDeviceName()
 	}
 
-	deviceID := generateDeviceID()
+	deviceID := getOrCreateDeviceID()
 
 	app.logger.Info("Starting Klip",
 		"device", cfg.DeviceName,
 		"device_id", deviceID,
 		"os", runtime.GOOS,
 	)
+	app.deviceID = deviceID
+	app.initLicense()
+	app.updateLicenseMenu()
 
 	if err := app.initializeComponents(cfg, deviceID); err != nil {
 		app.logger.Error("Failed to initialize", "error", err)
@@ -90,7 +102,6 @@ func (app *Application) startBackend() {
 		return
 	}
 
-	//app.updateStatus("Running")
 	systray.SetTooltip("Klip - Ready")
 	app.updatePeerMenu()
 
