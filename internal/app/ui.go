@@ -14,6 +14,8 @@ import (
 	"github.com/getlantern/systray"
 )
 
+const klipUrl = "https://klip-it.app"
+
 type peerEntry struct {
 	item   *systray.MenuItem
 	cancel context.CancelFunc
@@ -208,11 +210,11 @@ func (app *Application) showAbout() {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", "https://klip-it.app")
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", klipUrl)
 	case "darwin":
-		cmd = exec.Command("open", "https://klip-it.app")
+		cmd = exec.Command("open", klipUrl)
 	default:
-		cmd = exec.Command("xdg-open", "https://klip-it.app")
+		cmd = exec.Command("xdg-open", klipUrl)
 	}
 	if err := cmd.Start(); err != nil {
 		app.logger.Error("Failed to open browser", "error", err)
