@@ -48,6 +48,33 @@ func getReceivedFilesDir() string {
 	return filepath.Join(home, "Klip", "received-files")
 }
 
+func getOrCreateDeviceID() string {
+	dir := getConfigDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return generateDeviceID()
+	}
+
+	idPath := filepath.Join(dir, "device_id")
+	data, err := os.ReadFile(idPath)
+	if err == nil && len(data) > 0 {
+		return string(data)
+	}
+
+	id := generateDeviceID()
+	if err := os.WriteFile(idPath, []byte(id), 0600); err != nil {
+		return id
+	}
+	return id
+}
+
+func getConfigDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".klip-sync"
+	}
+	return filepath.Join(home, ".klip-sync")
+}
+
 func generateDeviceID() string {
 	b := make([]byte, deviceIDLength)
 	if _, err := rand.Read(b); err != nil {

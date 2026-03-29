@@ -12,6 +12,11 @@ import (
 )
 
 func (app *Application) handleIncomingFile(senderName, fileName string, fileSize int64) (bool, string) {
+	if app.isDeviceLimitBlocked() {
+		app.logger.Warn("Rejected incoming file: free device limit reached", "file", fileName)
+		return false, ""
+	}
+
 	app.playNotificationSound()
 
 	notificationTitle := "Incoming Transfer"
@@ -48,6 +53,11 @@ func (app *Application) handleIncomingFile(senderName, fileName string, fileSize
 }
 
 func (app *Application) sendFileToDevice(deviceID string) {
+	if app.isDeviceLimitBlocked() {
+		dialog.Message("Free device limit reached. Upgrade to Klip Pro to send files.").Title("Klip").Error()
+		return
+	}
+
 	app.logger.Info("Preparing to send", "device_id", deviceID)
 
 	peers := app.p2pMgr.GetPeers()
