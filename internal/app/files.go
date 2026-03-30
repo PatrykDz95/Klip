@@ -96,8 +96,13 @@ func (app *Application) sendFolder(deviceID, deviceName, folderPath string) {
 	folderName := filepath.Base(folderPath)
 	app.logger.Info("Sending folder", "folder", folderName, "to", deviceName)
 
+	app.updateStatus("Sending folder: " + folderName + "...")
+
 	if err := app.p2pMgr.SendFolder(deviceID, folderPath); err != nil {
 		app.logger.Error("Failed to send folder", "folder", folderName, "error", err)
+		app.updateStatus("Failed to send: " + folderName)
+		dialog.Message("Failed to send folder %s:\n%s", folderName, err.Error()).Title("Klip").Error()
+		app.hideStatusAfter(3)
 		return
 	}
 

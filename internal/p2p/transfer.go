@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"crypto/tls"
 	"encoding/json"
@@ -168,23 +169,22 @@ func (m *Manager) receiveFile(conn net.Conn, name string, expectedSize int64, sa
 		return fmt.Errorf("failed to create file: %w", err)
 	}
 
-	written, err := m.receiveData(conn, f, name, expectedSize)
-	if err != nil {
-		if closeErr := f.Close(); closeErr != nil {
-			m.logger.Warn("Failed to close incomplete file", "error", closeErr)
+	var receiveErr error
+	defer func() {
+		if receiveErr != nil {
+			f.Close()
+			os.Remove(savePath)
+			return
 		}
-		if removeErr := os.Remove(savePath); removeErr != nil {
-			m.logger.Warn("Failed to remove incomplete file", "path", savePath, "error", removeErr)
+		f.Sync()
+		if err := f.Close(); err != nil {
+			m.logger.Warn("Failed to close file", "error", err)
 		}
-		return err
-	}
+	}()
 
-	if err := f.Sync(); err != nil {
-		m.logger.Warn("Failed to sync file", "error", err)
-	}
-
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close file: %w", err)
+	written, receiveErr := m.receiveData(conn, f, name, expectedSize)
+	if receiveErr != nil {
+		return receiveErr
 	}
 
 	m.logger.Info("File saved", "bytes", written, "path", savePath)
@@ -348,17 +348,40 @@ func getDownloadPath(filename string) (string, error) {
 }
 
 func (m *Manager) createTarGz(w io.Writer, folderPath string) error {
-	gw := gzip.NewWriter(w)
+	bw := bufio.NewWriterSize(w, 1024*1024)
+	gw, _ := gzip.NewWriterLevel(bw, gzip.NoCompression)
 	tw := tar.NewWriter(gw)
 
-	walkErr := filepath.Walk(folderPath, func(path string, info os.FileInfo, err error) error {
+	walkErr := filepath.Walk(folderPath, m.tarWalkFunc(tw, folderPath))
+
+	if err := tw.Close(); err != nil && walkErr == nil {
+		walkErr = err
+	}
+	if err := gw.Close(); err != nil && walkErr == nil {
+		walkErr = err
+	}
+	if err := bw.Flush(); err != nil && walkErr == nil {
+		walkErr = err
+	}
+
+	return walkErr
+}
+
+func (m *Manager) tarWalkFunc(tw *tar.Writer, folderPath string) filepath.WalkFunc {
+	return func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			m.logger.Warn("Skipping inaccessible path", "path", path, "error", err)
+			return nil
+		}
+
+		if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+			return nil
 		}
 
 		header, err := tar.FileInfoHeader(info, "")
 		if err != nil {
-			return fmt.Errorf("failed to create tar header: %w", err)
+			m.logger.Warn("Skipping file with bad header", "path", path, "error", err)
+			return nil
 		}
 
 		relPath, err := filepath.Rel(filepath.Dir(folderPath), path)
@@ -369,40 +392,30 @@ func (m *Manager) createTarGz(w io.Writer, folderPath string) error {
 
 		if info.IsDir() {
 			header.Name += "/"
+			return tw.WriteHeader(header)
 		}
 
-		if err := tw.WriteHeader(header); err != nil {
-			return fmt.Errorf("failed to write tar header: %w", err)
-		}
-
-		if info.IsDir() {
-			return nil
-		}
-
-		return m.copyFileToTar(tw, path)
-	})
-
-	if err := tw.Close(); err != nil && walkErr == nil {
-		walkErr = fmt.Errorf("failed to close tar writer: %w", err)
+		return m.addFileToTar(tw, header, path)
 	}
-	if err := gw.Close(); err != nil && walkErr == nil {
-		walkErr = fmt.Errorf("failed to close gzip writer: %w", err)
-	}
-
-	return walkErr
 }
 
-func (m *Manager) copyFileToTar(tw *tar.Writer, path string) error {
+// opens the file first, then writes header + data to tar.
+// Opening before writing the header avoids corrupt entries (header without data).
+func (m *Manager) addFileToTar(tw *tar.Writer, header *tar.Header, path string) error {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		m.logger.Warn("Skipping unreadable file", "path", path, "error", err)
+		return nil
 	}
 
-	_, copyErr := io.Copy(tw, f)
-	if closeErr := f.Close(); closeErr != nil && copyErr == nil {
-		return closeErr
+	writeErr := tw.WriteHeader(header)
+	if writeErr == nil {
+		_, writeErr = io.Copy(tw, f)
 	}
-	return copyErr
+	if closeErr := f.Close(); closeErr != nil && writeErr == nil {
+		writeErr = closeErr
+	}
+	return writeErr
 }
 
 func (m *Manager) extractTarGz(r io.Reader, destDir string) error {
