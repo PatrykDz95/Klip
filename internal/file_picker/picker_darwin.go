@@ -15,11 +15,11 @@ type Result struct {
 // PickFileOrFolder opens a native macOS dialog that allows the user
 // to select either a file or a folder from a single panel.
 // Returns nil if the user cancelled.
-func PickFileOrFolder(title string) *Result {
-	ctitle := C.CString(title)
-	defer C.free(unsafe.Pointer(ctitle))
+func PickFileOrFolder() *Result {
+	title := C.CString("Select file or folder to send")
+	defer C.free(unsafe.Pointer(title))
 
-	r := C.pickFileOrFolder(ctitle)
+	r := C.pickFileOrFolder(title)
 	if r.path == nil {
 		return nil
 	}

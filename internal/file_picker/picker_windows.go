@@ -29,11 +29,11 @@ const (
 
 // PickFileOrFolder opens a native Windows file dialog.
 // First shows a file picker; if cancelled, shows a folder picker.
-func PickFileOrFolder(title string) *Result {
-	if result := showDialog(title, 0); result != nil {
+func PickFileOrFolder() *Result {
+	if result := showDialog("Select file to send", 0); result != nil {
 		return result
 	}
-	return showDialog(title, fosPickFolders)
+	return showDialog("Select folder to send", fosPickFolders)
 }
 
 func showDialog(title string, extraFlags uint32) *Result {

@@ -67,7 +67,7 @@ func (app *Application) sendFileToDevice(deviceID string) {
 		return
 	}
 
-	result := file_picker.PickFileOrFolder("Select file or folder to send")
+	result := file_picker.PickFileOrFolder()
 	if result == nil {
 		app.logger.Debug("Picker cancelled")
 		return
