@@ -172,11 +172,15 @@ func (m *Manager) receiveFile(conn net.Conn, name string, expectedSize int64, sa
 	var receiveErr error
 	defer func() {
 		if receiveErr != nil {
-			f.Close()
-			os.Remove(savePath)
+			_ = f.Close()
+			if err := os.Remove(savePath); err != nil {
+				m.logger.Warn("Could not remove corrupted file", "path", savePath, "err", err)
+			}
 			return
 		}
-		f.Sync()
+		if err := f.Sync(); err != nil {
+			m.logger.Error("Sync failed", "error", err)
+		}
 		if err := f.Close(); err != nil {
 			m.logger.Warn("Failed to close file", "error", err)
 		}
