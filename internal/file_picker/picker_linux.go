@@ -47,11 +47,11 @@ type Result struct {
 }
 
 // first shows a file picker. If cancelled, shows a folder picker.
-func PickFileOrFolder(title string) *Result {
-	if result := gtkDialog(title, 0); result != nil {
+func PickFileOrFolder() *Result {
+	if result := gtkDialog("Select file to send", 0); result != nil {
 		return result
 	}
-	return gtkDialog(title, 1)
+	return gtkDialog("Select folder to send", 1)
 }
 
 func gtkDialog(title string, pickFolder int) *Result {
