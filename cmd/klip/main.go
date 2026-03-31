@@ -10,7 +10,7 @@ import (
 	"github.com/getlantern/systray"
 )
 
-//go:embed assets/klip-fixed-256.png
+//go:embed assets/img.png
 var iconDataPng []byte
 
 //go:embed assets/klip-512.ico
