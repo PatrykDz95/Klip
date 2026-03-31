@@ -13,7 +13,7 @@ import (
 //go:embed assets/img.png
 var iconDataPng []byte
 
-//go:embed assets/klip-512.ico
+//go:embed assets/img.ico
 var iconIco []byte
 
 func main() {
