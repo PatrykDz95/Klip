@@ -317,8 +317,8 @@ func (m *Manager) sendFileReject(conn net.Conn) error {
 }
 
 func (m *Manager) resolveFileAcceptance(senderName, fileName string, fileSize int64) (bool, string) {
-	if m.onFileReceive != nil {
-		return m.onFileReceive(senderName, fileName, fileSize)
+	if m.events != nil {
+		return m.events.OnFileReceive(senderName, fileName, fileSize)
 	}
 
 	m.logger.Warn("No file receive callback set - auto-accepting")

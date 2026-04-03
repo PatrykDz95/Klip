@@ -68,7 +68,10 @@ Klip appears in your system tray. From there you can:
 - Pause/resume clipboard syncing
 
 ## Security
-- All connections use **TLS 1.3** with mutual authentication
+- All connections use **TLS 1.3**
+- Peer identity uses **TOFU + certificate fingerprint pinning**
+- First contact auto-trusts a device; future certificate changes require user confirmation
 - Certificates are **ECDSA P-256**, auto-generated and stored in `~/.klip-sync/certs/`
+- Trusted peer fingerprints are stored in `~/.klip-sync/trusted_peers.json`
 - Clipboard data is never sent unencrypted
 - File transfers require explicit acceptance from the receiving device

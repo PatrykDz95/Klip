@@ -1,13 +1,16 @@
 package p2p
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,24 +21,43 @@ type Manager struct {
 	port       int
 	peers      map[string]*Peer
 	mu         sync.RWMutex
-	onMessage  func(*Message)
 	lastHash   string
 	serverTLS  *tls.Config
 	clientTLS  *tls.Config
 	logger     *slog.Logger
 	listener   net.Listener
 	listenerMu sync.Mutex
+	events     EventHandler
 
 	Progress chan FileProgress
 
-	onFileReceive FileReceiveCallback
+	trustStore *peerTrustStore
 }
 
 type FileReceiveCallback func(senderName, fileName string, fileSize int64) (bool, string)
 
-func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, logger *slog.Logger) *Manager {
+type EventHandler interface {
+	OnMessage(msg *Message)
+	OnFileReceive(senderName, fileName string, fileSize int64) (bool, string)
+	OnPeerTrustDecision(decision PeerTrustDecision) bool
+}
+
+type PeerTrustDecision struct {
+	DeviceID           string
+	DeviceName         string
+	TrustedFingerprint string
+	PeerFingerprint    string
+}
+
+func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, logger *slog.Logger, events EventHandler) *Manager {
 	if logger == nil {
 		logger = slog.Default()
+	}
+
+	trustStore, err := newPeerTrustStore()
+	if err != nil {
+		logger.Warn("Failed to initialize peer trust store, using in-memory trust only", "error", err)
+		trustStore = &peerTrustStore{peers: make(map[string]trustedPeerRecord)}
 	}
 
 	return &Manager{
@@ -53,18 +75,11 @@ func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, lo
 			InsecureSkipVerify: true,
 			MinVersion:         tls.VersionTLS13,
 		},
-		logger:   logger,
-		Progress: make(chan FileProgress, 10),
+		logger:     logger,
+		events:     events,
+		Progress:   make(chan FileProgress, 10),
+		trustStore: trustStore,
 	}
-}
-
-// TODO remove callback methods
-func (m *Manager) SetOnMessage(callback func(*Message)) {
-	m.onMessage = callback
-}
-
-func (m *Manager) SetOnFileReceive(callback FileReceiveCallback) {
-	m.onFileReceive = callback
 }
 
 func (m *Manager) HasPeer(deviceID string) bool {
@@ -114,13 +129,24 @@ func (m *Manager) acceptLoop(listener net.Listener) {
 		}
 
 		tlsConn := conn.(*tls.Conn)
+
+		peerFingerprint, err := peerFingerprintSHA256(tlsConn)
+		if err != nil {
+			m.logger.Warn("Rejecting connection without valid peer certificate", "remote", conn.RemoteAddr(), "error", err)
+			if closeErr := conn.Close(); closeErr != nil {
+				m.logger.Debug("Failed to close rejected connection", "error", closeErr)
+			}
+			continue
+		}
+
 		m.logger.Debug("TLS connection accepted",
 			"remote", conn.RemoteAddr(),
+			"fingerprint", shortFingerprint(peerFingerprint),
 			"cipher", cipherSuiteName(tlsConn.ConnectionState().CipherSuite),
 		)
 
 		go func() {
-			if err := m.handleConnection(tlsConn, false); err != nil {
+			if err := m.handleConnection(tlsConn, false, peerFingerprint); err != nil {
 				m.logger.Error("Connection handling error", "error", err)
 			}
 		}()
@@ -138,18 +164,34 @@ func (m *Manager) Connect(deviceID, address string) error {
 	if err != nil {
 		return fmt.Errorf("TLS dial failed: %w", err)
 	}
+	defer func(conn *tls.Conn) {
+		err := conn.Close()
+		if err != nil {
+			m.logger.Debug("Failed to close connection", "error", err)
+		}
+	}(conn)
 
 	state := conn.ConnectionState()
+
+	peerFingerprint, err := peerFingerprintSHA256(conn)
+	if err != nil {
+		if closeErr := conn.Close(); closeErr != nil {
+			m.logger.Debug("Failed to close rejected connection", "error", closeErr)
+		}
+		return fmt.Errorf("failed to get peer certificate fingerprint: %w", err)
+	}
+
 	m.logger.Info("TLS connection established",
 		"peer", deviceID,
 		"tls_version", tlsVersionName(state.Version),
+		"fingerprint", shortFingerprint(peerFingerprint),
 		"cipher", cipherSuiteName(state.CipherSuite),
 	)
 
-	return m.handleConnection(conn, true)
+	return m.handleConnection(conn, true, peerFingerprint)
 }
 
-func (m *Manager) handleConnection(conn net.Conn, initiator bool) error {
+func (m *Manager) handleConnection(conn net.Conn, initiator bool, peerFingerprint string) error {
 	defer func() {
 		if err := conn.Close(); err != nil {
 			m.logger.Debug("Failed to close connection", "error", err)
@@ -170,6 +212,19 @@ func (m *Manager) handleConnection(conn net.Conn, initiator bool) error {
 		return fmt.Errorf("failed to decode message: %w", err)
 	}
 
+	if msg.DeviceID == "" {
+		return fmt.Errorf("invalid message: missing device ID")
+	}
+
+	deviceName := ""
+	if msg.Payload != nil {
+		deviceName = msg.Payload.DeviceName
+	}
+
+	if err := m.verifyPeerTrust(msg.DeviceID, deviceName, peerFingerprint); err != nil {
+		return err
+	}
+
 	switch msg.Type {
 	case MsgTypeFileOffer:
 		return m.handleFileOffer(conn, &msg)
@@ -178,6 +233,46 @@ func (m *Manager) handleConnection(conn net.Conn, initiator bool) error {
 	default:
 		return fmt.Errorf("unexpected message type: %s", msg.Type)
 	}
+}
+
+func (m *Manager) verifyPeerTrust(deviceID, deviceName, fingerprint string) error {
+	if m.trustStore == nil {
+		return nil
+	}
+
+	rec, exists := m.trustStore.Get(deviceID)
+	if !exists {
+		if err := m.trustStore.Set(deviceID, deviceName, fingerprint); err != nil {
+			return fmt.Errorf("failed to store trusted fingerprint: %w", err)
+		}
+		m.logger.Info("Trusted new peer (TOFU)", "device_id", deviceID, "fingerprint", shortFingerprint(fingerprint))
+		return nil
+	}
+
+	if rec.Fingerprint == fingerprint {
+		if err := m.trustStore.Touch(deviceID, deviceName); err != nil {
+			m.logger.Warn("Failed to update trust record timestamp", "device_id", deviceID, "error", err)
+		}
+		return nil
+	}
+
+	decision := PeerTrustDecision{
+		DeviceID:           deviceID,
+		DeviceName:         deviceName,
+		TrustedFingerprint: rec.Fingerprint,
+		PeerFingerprint:    fingerprint,
+	}
+
+	if m.events == nil || !m.events.OnPeerTrustDecision(decision) {
+		return fmt.Errorf("peer identity mismatch for %s", deviceID)
+	}
+
+	if err := m.trustStore.Set(deviceID, deviceName, fingerprint); err != nil {
+		return fmt.Errorf("failed to update trusted fingerprint: %w", err)
+	}
+
+	m.logger.Warn("Peer trust updated after fingerprint change", "device_id", deviceID, "fingerprint", shortFingerprint(fingerprint))
+	return nil
 }
 
 func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.Encoder, decoder *json.Decoder, initiator bool) error {
@@ -232,8 +327,8 @@ func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.E
 			m.logger.Debug("Peer disconnected", "peer", peer.DeviceName, "error", err)
 			return nil
 		}
-		if mMsg.Type == MsgTypeSync && m.onMessage != nil {
-			m.onMessage(&mMsg)
+		if mMsg.Type == MsgTypeSync && m.events != nil {
+			m.events.OnMessage(&mMsg)
 		}
 	}
 }
@@ -249,6 +344,29 @@ func (m *Manager) newHelloMessage() *Message {
 			OS:         runtime.GOOS,
 		},
 	}
+}
+
+// For incoming connections, ensure the handshake has already occurred.
+// For tls.DialWithDialer, the handshake is typically done immediately.
+func peerFingerprintSHA256(tlsConn *tls.Conn) (string, error) {
+	if err := tlsConn.Handshake(); err != nil {
+		return "", fmt.Errorf("TLS handshake failed: %w", err)
+	}
+
+	state := tlsConn.ConnectionState()
+	if len(state.PeerCertificates) == 0 {
+		return "", fmt.Errorf("peer certificate not provided")
+	}
+
+	sum := sha256.Sum256(state.PeerCertificates[0].Raw)
+	return strings.ToUpper(hex.EncodeToString(sum[:])), nil
+}
+
+func shortFingerprint(fp string) string {
+	if len(fp) <= 16 {
+		return fp
+	}
+	return fp[:16]
 }
 
 func (m *Manager) getSenderName(deviceID string) string {
