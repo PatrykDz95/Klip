@@ -71,7 +71,12 @@ func GenerateSelfSignedCert(certDir, deviceID string) (*tls.Certificate, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cert file: %w", err)
 	}
-	defer certOut.Close()
+	defer func(certOut *os.File) {
+		err := certOut.Close()
+		if err != nil {
+			fmt.Printf("Warning: failed to close cert file: %v\n", err)
+		}
+	}(certOut)
 
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER}); err != nil {
 		return nil, fmt.Errorf("failed to write cert: %w", err)
@@ -81,7 +86,12 @@ func GenerateSelfSignedCert(certDir, deviceID string) (*tls.Certificate, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create key file: %w", err)
 	}
-	defer keyOut.Close()
+	defer func(keyOut *os.File) {
+		err := keyOut.Close()
+		if err != nil {
+			fmt.Printf("Warning: failed to close key file: %v\n", err)
+		}
+	}(keyOut)
 
 	keyBytes, err := x509.MarshalECPrivateKey(privateKey)
 	if err != nil {
