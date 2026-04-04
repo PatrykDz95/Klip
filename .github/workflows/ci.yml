@@ -9,6 +9,7 @@ on:
     branches:
       - master
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,6 +31,9 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Install Linux dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libayatana-appindicator3-dev
 
@@ -43,7 +47,7 @@ jobs:
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
       - name: Run staticcheck
-        run: "$(go env GOPATH)/bin/staticcheck" ./...
+        run: staticcheck ./...
 
   security:
     name: Security Checks
@@ -57,6 +61,9 @@ jobs:
         with:
           go-version: '1.25'
 
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -66,7 +73,7 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Run govulncheck
-        run: "$(go env GOPATH)/bin/govulncheck" ./...
+        run: govulncheck ./...
 
   test:
     name: Unit and Build Tests
