@@ -9,6 +9,18 @@
   <a href="https://klip-it.app">
     <img src="https://img.shields.io/static/v1?label=Website&message=klip-it.app&color=7c6df0" />
   </a>
+  <a href="https://github.com/PatrykDz95/Klip/actions/workflows/ci.yml">
+    <img src="https://github.com/PatrykDz95/Klip/actions/workflows/ci.yml/badge.svg" alt="CI" />
+  </a>
+  <a href="https://github.com/PatrykDz95/Klip/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/static/v1?label=Coverage&message=coverage.out%20artifact&color=2ea44f" alt="Coverage" />
+  </a>
+  <a href="https://github.com/PatrykDz95/Klip/releases/latest">
+    <img src="https://img.shields.io/github/v/release/PatrykDz95/Klip?label=Release" alt="Release" />
+  </a>
+  <a href="https://github.com/PatrykDz95/Klip/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/PatrykDz95/Klip?label=License" alt="License" />
+  </a>
   <a href="https://github.com/PatrykDz95/Klip">
     <img src="https://img.shields.io/static/v1?label=Language&message=Go&color=00ADD8" />
   </a>
@@ -66,6 +78,11 @@ Klip appears in your system tray. From there you can:
 - See connected devices
 - Send a file — click the device name in the tray menu and select a file
 - Pause/resume clipboard syncing
+
+## Testing
+- Unit/integration tests: `go test ./... -count=1 -timeout=2m`
+- Race detector: `go test -race ./... -count=1 -timeout=5m`
+- Coverage report file (local): `go test ./... -covermode=atomic -coverprofile=coverage.out`
 
 ## Security
 - All connections use **TLS 1.3**
