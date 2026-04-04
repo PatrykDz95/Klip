@@ -1,6 +1,11 @@
 package app
 
-import "github.com/sqweek/dialog"
+import (
+	"fmt"
+	"klip/internal/p2p"
+
+	"github.com/sqweek/dialog"
+)
 
 func (app *Application) handlePeerDiscovered(peerID, addr string) {
 	if app.p2pMgr.HasPeer(peerID) {
@@ -45,4 +50,26 @@ func (app *Application) connectToManualPeer(addr string) {
 	if err := app.p2pMgr.Connect("manual-peer", addr); err != nil {
 		app.logger.Error("Failed to connect to manual peer", "error", err)
 	}
+}
+
+func (app *Application) confirmPeerTrustDecision(decision p2p.PeerTrustDecision) bool {
+	deviceName := decision.DeviceName
+	if deviceName == "" {
+		deviceName = "Unknown device"
+	}
+
+	question := fmt.Sprintf(
+		"%s (%s) changed its security identity.\n\nTrusted fingerprint:\n%s\n\nNew fingerprint:\n%s\n\nTrust this device again?",
+		deviceName,
+		decision.DeviceID,
+		decision.TrustedFingerprint,
+		decision.PeerFingerprint,
+	)
+
+	trusted := dialog.Message("%s", question).Title("Klip Security Warning").YesNo()
+	if !trusted {
+		app.logger.Warn("Rejected peer with changed fingerprint", "device_id", decision.DeviceID)
+	}
+
+	return trusted
 }

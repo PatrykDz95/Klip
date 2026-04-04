@@ -99,12 +99,8 @@ func (d *Discovery) scan(ctx context.Context) {
 	go func() {
 		for entry := range entriesCh {
 			// Ignore self
-			if strings.Contains(entry.Name, d.deviceID) {
-				continue
-			}
-
 			deviceID := extractField(entry.InfoFields, "device_id")
-			if deviceID == "" {
+			if deviceID == "" || deviceID == d.deviceID {
 				continue
 			}
 

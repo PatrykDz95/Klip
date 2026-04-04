@@ -154,10 +154,7 @@ func (app *Application) initializeComponents(cfg *Config, deviceID string) error
 	app.clipboard = cb
 
 	app.updateStatus("Starting network")
-	app.p2pMgr = p2p.NewManager(deviceID, cfg.DeviceName, cfg.Port, cert, app.logger)
-
-	app.p2pMgr.SetOnMessage(app.handleClipboardSync)
-	app.p2pMgr.SetOnFileReceive(app.handleIncomingFile)
+	app.p2pMgr = p2p.NewManager(deviceID, cfg.DeviceName, cfg.Port, cert, app.logger, newP2PEventHandler(app))
 	app.hideStatusAfter(5)
 
 	return nil
