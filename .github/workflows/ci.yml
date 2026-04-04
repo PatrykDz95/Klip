@@ -134,7 +134,7 @@ jobs:
             cgo: 1
           - os: macos-latest
             goos: darwin
-            cgo: 0
+            cgo: 1
           - os: windows-latest
             goos: windows
             cgo: 0
