@@ -245,7 +245,7 @@ func (m *Manager) verifyPeerTrust(deviceID, deviceName, fingerprint string) erro
 		if err := m.trustStore.Set(deviceID, deviceName, fingerprint); err != nil {
 			return fmt.Errorf("failed to store trusted fingerprint: %w", err)
 		}
-		m.logger.Info("Trusted new peer (TOFU)", "device_id", deviceID, "fingerprint", shortFingerprint(fingerprint))
+		m.logger.Info("Trusted new peer", "device_id", deviceID, "fingerprint", shortFingerprint(fingerprint))
 		return nil
 	}
 

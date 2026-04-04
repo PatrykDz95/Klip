@@ -137,7 +137,7 @@ func (app *Application) initializeComponents(cfg *Config, deviceID string) error
 	certDir := getCertDir()
 	cert, err := security.GenerateSelfSignedCert(certDir, deviceID)
 	if err != nil {
-		return fmt.Errorf("certificate generation failed: %w", err)
+		return fmt.Errorf("certificate generation failed in %s: %w", certDir, err)
 	}
 
 	// Ensure received files directory exists
