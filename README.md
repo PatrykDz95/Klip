@@ -14,7 +14,7 @@
   </a>
   <a href="https://github.com/PatrykDz95/Klip/actions/workflows/ci.yml">
     <img src="https://img.shields.io/static/v1?label=Coverage&message=coverage.out%20artifact&color=2ea44f" alt="Coverage" />
-  </a>
+  </a> 
   <a href="https://github.com/PatrykDz95/Klip/releases/latest">
     <img src="https://img.shields.io/github/v/release/PatrykDz95/Klip?label=Release" alt="Release" />
   </a>
