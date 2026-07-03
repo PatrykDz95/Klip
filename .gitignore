@@ -18,9 +18,13 @@ coverage.txt
 # Go workspace file
 go.work
 
-# Certificates
+# Certificates / signing material (NEVER commit — use CI secrets)
 *.pem
 *.key
+*.p12
+*.pfx
+*.cer
+*.mobileprovision
 certs/
 
 # IDE

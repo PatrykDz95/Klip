@@ -67,9 +67,59 @@ jobs:
         run: Compress-Archive -Path klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} -DestinationPath klip-${{ matrix.goos }}-${{ matrix.goarch }}.zip
         shell: pwsh
 
-      - name: Package (Unix)
-        if: matrix.goos != 'windows'
+      - name: Package (Linux)
+        if: matrix.goos == 'linux'
         run: tar czf klip-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+
+      - name: Package macOS .app
+        if: matrix.goos == 'darwin'
+        run: |
+          set -euo pipefail
+          APP="Klip.app"
+          VER="${GITHUB_REF_NAME#v}"
+
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp "klip-darwin-arm64" "$APP/Contents/MacOS/klip"
+          chmod +x "$APP/Contents/MacOS/klip"
+
+          cat > "$APP/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+          <key>CFBundleName</key><string>Klip</string>
+          <key>CFBundleDisplayName</key><string>Klip</string>
+          <key>CFBundleIdentifier</key><string>app.klip-it.klip</string>
+          <key>CFBundleExecutable</key><string>klip</string>
+          <key>CFBundleIconFile</key><string>klip</string>
+          <key>CFBundleVersion</key><string>${VER}</string>
+          <key>CFBundleShortVersionString</key><string>${VER}</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+          <key>LSMinimumSystemVersion</key><string>11.0</string>
+          <key>LSUIElement</key><true/>
+          <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          PLIST
+
+          # Build .icns from the 1024x1024 source icon
+          SRC="cmd/klip/assets/klip-icon.png"
+          ICONSET="klip.iconset"
+          mkdir -p "$ICONSET"
+          for s in 16 32 128 256 512; do
+            sips -z "$s" "$s" "$SRC" --out "$ICONSET/icon_${s}x${s}.png" >/dev/null
+            sips -z "$((s*2))" "$((s*2))" "$SRC" --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null
+          done
+          iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/klip.icns"
+
+          # Ad-hoc sign (no Developer ID). Lets the binary run on arm64; users still
+          # clear quarantine once on first launch (see README).
+          codesign --force --sign - "$APP/Contents/MacOS/klip"
+          codesign --force --sign - "$APP"
+          codesign --verify --verbose "$APP"
+
+          # Zip preserving the bundle structure/metadata (plain zip mangles it).
+          ditto -c -k --keepParent "$APP" "klip-darwin-arm64.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
@@ -98,3 +148,23 @@ jobs:
         with:
           generate_release_notes: true
           files: artifacts/*
+
+  # Updates the Homebrew tap formula (url + sha256) to the new tag.
+  # Skipped until the HOMEBREW_TAP_TOKEN secret is set, so it never fails a
+  # release before the tap exists. Requires a PAT with contents+PR write on
+  # the PatrykDz95/homebrew-tap repo.
+  bump-homebrew:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bump Homebrew tap formula
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        uses: dawidd6/action-homebrew-bump-formula@v8
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          tap: PatrykDz95/homebrew-tap
+          formula: klip
+          tag: ${{ github.ref_name }}
+          no_fork: true

@@ -50,21 +50,38 @@ Klip runs in the system tray and automatically syncs your clipboard between all 
 ## Klip Pro
 The free version supports up to 2 devices. [Klip Pro](https://klip-it.app/#pricing) removes this limit.
 
-### macOS / Windows
-Download the latest release from the [Releases page](https://github.com/PatrykDz95/Klip/releases/latest).
+## Installation
 
-### macOS Gatekeeper Notice
-macOS may block Klip on first launch because it is not signed with an Apple Developer certificate. This is expected for open-source tools distributed outside the App Store.
-
-**To open it anyway:**
-
-Option 1 — right-click the binary and select **Open**, then confirm in the dialog.
-
-Option 2 — run this in Terminal after downloading:
+### Homebrew (macOS & Linux) — recommended
 ```bash
-xattr -cr /path/to/klip-darwin-arm64
+brew install PatrykDz95/tap/klip
 ```
-Then double-click as normal.
+Homebrew builds Klip from source on your machine, so on macOS the binary is **not quarantined and Gatekeeper never blocks it** — no "Open Anyway" step needed.
+
+### Scoop (Windows)
+```powershell
+scoop install https://raw.githubusercontent.com/PatrykDz95/Klip/master/packaging/scoop/klip.json
+```
+
+### Manual download
+Download the latest release from the [Releases page](https://github.com/PatrykDz95/Klip/releases/latest).
+On macOS, unzip `klip-darwin-arm64.zip` and move **Klip.app** to your Applications folder (see the first-launch note below).
+
+### macOS — first launch
+Klip is **not** malware — it is open-source and unsigned (it has no paid Apple Developer certificate). Because of that, macOS Gatekeeper blocks it on first launch with a message like *"Apple could not verify Klip is free of malware"*. You only need to allow it **once**.
+
+**Option 1 — via System Settings (recommended, works on macOS Sequoia):**
+1. Double-click **Klip.app** — the blocked dialog appears; click **Done**.
+2. Open **System Settings → Privacy & Security**, scroll down to the *"Klip was blocked…"* notice and click **Open Anyway**.
+3. Confirm with Touch ID / password, then click **Open** in the final dialog.
+
+After this, Klip launches normally every time.
+
+**Option 2 — via Terminal (one command):**
+```bash
+xattr -dr com.apple.quarantine /Applications/Klip.app
+```
+Then open Klip.app as usual.
 
 ## Windows Defender / Antivirus Notice
 Klip is unsigned, so your antivirus may flag it as suspicious. This is a false positive — the app is open source and you can review or build it yourself:
