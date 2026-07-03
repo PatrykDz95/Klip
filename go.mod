@@ -1,13 +1,13 @@
 module klip
 
-go 1.25.0
+go 1.25.11
 
 require (
 	github.com/gen2brain/beeep v0.11.2
 	github.com/getlantern/systray v1.2.2
-	github.com/hashicorp/mdns v1.0.6
+	github.com/hashicorp/mdns v1.0.7
 	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac
-	golang.org/x/sys v0.43.0
+	golang.org/x/sys v0.46.0
 )
 
 require (
@@ -22,16 +22,16 @@ require (
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
-	github.com/godbus/dbus/v5 v5.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/jackmordaunt/icns/v3 v3.0.1 // indirect
-	github.com/miekg/dns v1.1.55 // indirect
+	github.com/miekg/dns v1.1.72 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
 	github.com/sergeymakinen/go-ico v1.0.0-beta.0 // indirect
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
-	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
+	golang.org/x/mod v0.36.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/tools v0.45.0 // indirect
 )

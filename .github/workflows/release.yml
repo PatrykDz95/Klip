@@ -33,9 +33,9 @@ jobs:
       LEMON_PRODUCT_ID: ${{ secrets.LEMON_PRODUCT_ID }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.25.11'
 
@@ -72,7 +72,7 @@ jobs:
         run: tar czf klip-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz klip-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: klip-${{ matrix.goos }}-${{ matrix.goarch }}
           path: klip-${{ matrix.goos }}-${{ matrix.goarch }}.*
@@ -82,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           path: artifacts
           merge-multiple: true
@@ -94,7 +94,7 @@ jobs:
           cat checksums.txt
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: artifacts/*
