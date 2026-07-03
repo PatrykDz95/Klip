@@ -69,6 +69,47 @@ func TestExtractTarGzBlocksPathTraversal(t *testing.T) {
 	}
 }
 
+func TestSanitizeName(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"plain file", "report.pdf", "report.pdf", false},
+		{"nested path collapses to base", "a/b/c.txt", "c.txt", false},
+		{"absolute path collapses to base", "/etc/passwd", "passwd", false},
+		{"traversal collapses to safe base", "../../secret", "secret", false},
+		{"pure dotdot rejected", "..", "", true},
+		{"single dot rejected", ".", "", true},
+		{"empty rejected", "", "", true},
+		{"whitespace rejected", "   ", "", true},
+		{"trailing traversal rejected", "foo/..", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := SanitizeName(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q, got %q", tt.input, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.input, err)
+			}
+			// Security invariant: output is always a single, contained component.
+			if strings.ContainsRune(got, filepath.Separator) || got == ".." {
+				t.Fatalf("sanitized name %q is not a safe component", got)
+			}
+			if tt.want != "" && got != tt.want {
+				t.Fatalf("SanitizeName(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExtractTarGzExtractsRegularFile(t *testing.T) {
 	m := newTestManager(t)
 	destDir := t.TempDir()

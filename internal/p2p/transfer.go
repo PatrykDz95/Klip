@@ -330,7 +330,24 @@ func (m *Manager) resolveFileAcceptance(senderName, fileName string, fileSize in
 	return true, savePath
 }
 
+// SanitizeName reduces a peer-supplied file/folder name to a single safe path
+// component. The name arrives over the network, so without this filepath.Join
+// would resolve embedded "../" and let a malicious peer write outside the
+// destination directory (arbitrary file write, e.g. into an autostart dir).
+func SanitizeName(name string) (string, error) {
+	base := filepath.Base(filepath.FromSlash(name))
+	if base == "." || base == ".." || strings.TrimSpace(base) == "" || strings.ContainsRune(base, filepath.Separator) {
+		return "", fmt.Errorf("unsafe transfer name %q", name)
+	}
+	return base, nil
+}
+
 func getDownloadPath(filename string) (string, error) {
+	safeName, err := SanitizeName(filename)
+	if err != nil {
+		return "", err
+	}
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -341,10 +358,10 @@ func getDownloadPath(filename string) (string, error) {
 		return "", err
 	}
 
-	savePath := filepath.Join(downloadDir, filename)
+	savePath := filepath.Join(downloadDir, safeName)
 	if _, err := os.Stat(savePath); err == nil {
-		ext := filepath.Ext(filename)
-		base := filename[:len(filename)-len(ext)]
+		ext := filepath.Ext(safeName)
+		base := safeName[:len(safeName)-len(ext)]
 		savePath = filepath.Join(downloadDir, fmt.Sprintf("%s_%d%s", base, time.Now().Unix(), ext))
 	}
 

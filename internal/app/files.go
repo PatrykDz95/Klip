@@ -17,6 +17,12 @@ func (app *Application) handleIncomingFile(senderName, fileName string, fileSize
 		return false, ""
 	}
 
+	fileName, err := p2p.SanitizeName(fileName)
+	if err != nil {
+		app.logger.Warn("Rejected incoming file with unsafe name", "error", err)
+		return false, ""
+	}
+
 	app.playNotificationSound()
 
 	notificationTitle := "Incoming Transfer"
