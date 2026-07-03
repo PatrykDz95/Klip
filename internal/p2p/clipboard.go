@@ -32,6 +32,11 @@ func (m *Manager) BroadcastClipBoard(content string) {
 	peerCount := len(m.peers)
 	for _, peer := range m.peers {
 		go func(p *Peer) {
+			// Bound the write so a peer whose TCP send buffer is full (slow/dead)
+			// can't block this goroutine forever.
+			if err := p.Conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+				m.logger.Debug("Failed to set write deadline", "peer", p.DeviceName, "error", err)
+			}
 			if err := json.NewEncoder(p.Conn).Encode(msg); err != nil {
 				m.logger.Error("Broadcast failed", "peer", p.DeviceName, "error", err)
 			}

@@ -75,7 +75,6 @@ func (app *Application) activateLicense() {
 	app.license = &stored
 	app.licenseMu.Unlock()
 
-	app.setDeviceLimitBlocked(false)
 	app.logger.Info("Pro license activated")
 	dialog.Message("Pro license activated! Unlimited devices enabled.").Title("Klip").Info()
 }

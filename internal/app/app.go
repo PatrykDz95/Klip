@@ -34,9 +34,6 @@ type Application struct {
 	paused   bool
 	pausedMu sync.RWMutex
 
-	deviceLimitBlocked bool
-	deviceLimitMu      sync.RWMutex
-
 	license       *license.StoredLicense
 	licenseMu     sync.RWMutex
 	licenseClient *license.Client

@@ -15,6 +15,17 @@ import (
 	"time"
 )
 
+const (
+	// handshakeTimeout bounds the TLS handshake + hello exchange so a peer that
+	// connects but never speaks cannot pin a goroutine forever.
+	handshakeTimeout = 10 * time.Second
+	// keepAlivePeriod lets the OS detect peers that vanished without a clean
+	// close (powered off), unblocking the otherwise-forever-blocked reader.
+	keepAlivePeriod = 30 * time.Second
+	// writeTimeout bounds a single broadcast write to a peer.
+	writeTimeout = 10 * time.Second
+)
+
 type Manager struct {
 	deviceID   string
 	deviceName string
@@ -127,30 +138,48 @@ func (m *Manager) acceptLoop(listener net.Listener) {
 			m.logger.Error("Accept error", "error", err)
 			continue
 		}
-
-		tlsConn := conn.(*tls.Conn)
-
-		peerFingerprint, err := peerFingerprintSHA256(tlsConn)
-		if err != nil {
-			m.logger.Warn("Rejecting connection without valid peer certificate", "remote", conn.RemoteAddr(), "error", err)
-			if closeErr := conn.Close(); closeErr != nil {
-				m.logger.Debug("Failed to close rejected connection", "error", closeErr)
-			}
-			continue
-		}
-
-		m.logger.Debug("TLS connection accepted",
-			"remote", conn.RemoteAddr(),
-			"fingerprint", shortFingerprint(peerFingerprint),
-			"cipher", cipherSuiteName(tlsConn.ConnectionState().CipherSuite),
-		)
-
-		go func() {
-			if err := m.handleConnection(tlsConn, false, peerFingerprint); err != nil {
-				m.logger.Error("Connection handling error", "error", err)
-			}
-		}()
+		// Handshake in its own goroutine: a peer that stalls mid-handshake must
+		// never block Accept(), which would freeze all other incoming connections.
+		go m.acceptConnection(conn.(*tls.Conn))
 	}
+}
+
+func (m *Manager) acceptConnection(conn *tls.Conn) {
+	enableKeepAlive(conn)
+	if err := conn.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil {
+		m.logger.Debug("Failed to set handshake deadline", "error", err)
+	}
+
+	peerFingerprint, err := peerFingerprintSHA256(conn)
+	if err != nil {
+		m.logger.Warn("Rejecting connection without valid peer certificate", "remote", conn.RemoteAddr(), "error", err)
+		if closeErr := conn.Close(); closeErr != nil {
+			m.logger.Debug("Failed to close rejected connection", "error", closeErr)
+		}
+		return
+	}
+
+	m.logger.Debug("TLS connection accepted",
+		"remote", conn.RemoteAddr(),
+		"fingerprint", shortFingerprint(peerFingerprint),
+		"cipher", cipherSuiteName(conn.ConnectionState().CipherSuite),
+	)
+
+	if err := m.handleConnection(conn, false, peerFingerprint); err != nil {
+		m.logger.Error("Connection handling error", "error", err)
+	}
+}
+
+// enableKeepAlive turns on TCP keepalive so a peer that disappears without a
+// clean FIN (e.g. powered off) is eventually detected by the OS, which errors
+// the blocked read and lets the session goroutine exit.
+func enableKeepAlive(conn *tls.Conn) {
+	tcp, ok := conn.NetConn().(*net.TCPConn)
+	if !ok {
+		return
+	}
+	_ = tcp.SetKeepAlive(true)
+	_ = tcp.SetKeepAlivePeriod(keepAlivePeriod)
 }
 
 // Connect establishes a TLS connection to a peer.
@@ -164,6 +193,7 @@ func (m *Manager) Connect(deviceID, address string) error {
 	if err != nil {
 		return fmt.Errorf("TLS dial failed: %w", err)
 	}
+	enableKeepAlive(conn)
 	defer func(conn *tls.Conn) {
 		err := conn.Close()
 		if err != nil {
@@ -198,6 +228,11 @@ func (m *Manager) handleConnection(conn net.Conn, initiator bool, peerFingerprin
 		}
 	}()
 
+	// Bound the hello exchange; cleared once the peer is verified below.
+	if err := conn.SetDeadline(time.Now().Add(handshakeTimeout)); err != nil {
+		m.logger.Debug("Failed to set hello deadline", "error", err)
+	}
+
 	decoder := json.NewDecoder(conn)
 	encoder := json.NewEncoder(conn)
 
@@ -223,6 +258,13 @@ func (m *Manager) handleConnection(conn net.Conn, initiator bool, peerFingerprin
 
 	if err := m.verifyPeerTrust(msg.DeviceID, deviceName, peerFingerprint); err != nil {
 		return err
+	}
+
+	// Hello done. Clear the deadline: file transfers set their own, and the
+	// session loop relies on keepalive — a fixed deadline would disconnect
+	// peers that are simply idle (no clipboard changes) for a while.
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		m.logger.Debug("Failed to clear deadline", "error", err)
 	}
 
 	switch msg.Type {

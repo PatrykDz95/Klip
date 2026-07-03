@@ -15,7 +15,6 @@ func (app *Application) handlePeerDiscovered(peerID, addr string) {
 
 	if !app.isPro() && len(app.p2pMgr.GetPeers()) >= maxFreeDevices {
 		app.logger.Warn("Free version limited to 2 devices")
-		app.setDeviceLimitBlocked(true)
 		app.updateStatus("Free limit reached - Upgrade to Pro")
 		dialog.Message("You've reached the free limit of 2 devices.\n\nUpgrade to Klip Pro for unlimited devices.").
 			Title("Klip - Device Limit Reached").Info()
@@ -32,16 +31,10 @@ func (app *Application) handlePeerDiscovered(peerID, addr string) {
 	app.updatePeerMenu()
 }
 
-func (app *Application) setDeviceLimitBlocked(v bool) {
-	app.deviceLimitMu.Lock()
-	app.deviceLimitBlocked = v
-	app.deviceLimitMu.Unlock()
-}
-
+// isDeviceLimitBlocked reports whether the free-tier limit is currently exceeded.
+// Computed live from the connected peer count so it self-corrects when a peer
 func (app *Application) isDeviceLimitBlocked() bool {
-	app.deviceLimitMu.RLock()
-	defer app.deviceLimitMu.RUnlock()
-	return app.deviceLimitBlocked
+	return !app.isPro() && len(app.p2pMgr.GetPeers()) > maxFreeDevices
 }
 
 func (app *Application) connectToManualPeer(addr string) {
