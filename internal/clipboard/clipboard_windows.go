@@ -6,6 +6,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"log/slog"
+	"runtime"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -41,6 +43,7 @@ const (
 type windowsClipboard struct {
 	lastHash [32]byte
 	logger   *slog.Logger
+	mu       sync.Mutex // serializes clipboard access (Get vs Set)
 }
 
 func newClipboard(logger *slog.Logger) (Clipboard, error) {
@@ -50,10 +53,50 @@ func newClipboard(logger *slog.Logger) (Clipboard, error) {
 	return &windowsClipboard{logger: logger}, nil
 }
 
+// openClipboardRetry opens the clipboard, retrying briefly because on Windows 11
+// the Clipboard History / Cloud Clipboard services hold the clipboard open for
+// short windows whenever its contents change (these are off by default on Win10).
+// The caller MUST have the OS thread locked before calling, and must call
+// CloseClipboard from the SAME thread.
+func openClipboardRetry() error {
+	var lastErr error
+	for range 10 {
+		if r, _, err := openClipboard.Call(0); r != 0 {
+			return nil
+		} else {
+			lastErr = err
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return fmt.Errorf("failed to open clipboard: %w", lastErr)
+}
+
+// unlockGlobal calls GlobalUnlock and only warns on a genuine failure.
+// GlobalUnlock returns 0 both on error AND when the lock count simply reached 0
+// (the normal case), so it must be distinguished via GetLastError: a zero errno
+// means success. Without this check every successful unlock logs a spurious
+// "GlobalUnlock failed: The operation completed successfully." warning.
+func (c *windowsClipboard) unlockGlobal(h uintptr) {
+	if r, _, e := globalUnlock.Call(h); r == 0 {
+		if errno, ok := e.(syscall.Errno); ok && errno != 0 {
+			c.logger.Warn("GlobalUnlock failed", "error", e)
+		}
+	}
+}
+
 func (c *windowsClipboard) Get() (string, error) {
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return "", fmt.Errorf("failed to open clipboard: %w", err)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// The clipboard is bound to the OS thread that opens it: OpenClipboard,
+	// GetClipboardData and CloseClipboard must all run on the same thread.
+	// Without this the Go scheduler can migrate the goroutine mid-call, causing
+	// "Thread does not have a clipboard open." errors.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if err := openClipboardRetry(); err != nil {
+		return "", err
 	}
 	defer func() {
 		if r, _, e := closeClipboard.Call(); r == 0 {
@@ -70,19 +113,21 @@ func (c *windowsClipboard) Get() (string, error) {
 	if ptr == 0 {
 		return "", fmt.Errorf("failed to lock clipboard memory")
 	}
-	defer func() {
-		if r, _, e := globalUnlock.Call(h); r == 0 {
-			c.logger.Warn("GlobalUnlock failed", "error", e)
-		}
-	}()
+	defer c.unlockGlobal(h)
 
 	return windows.UTF16PtrToString((*uint16)(unsafe.Pointer(ptr))), nil //nolint:unsafeptr
 }
 
 func (c *windowsClipboard) Set(content string) error {
-	r, _, err := openClipboard.Call(0)
-	if r == 0 {
-		return fmt.Errorf("failed to open clipboard: %w", err)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// All clipboard calls below must run on the same OS thread — see Get().
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	if err := openClipboardRetry(); err != nil {
+		return err
 	}
 	defer func() {
 		if r, _, e := closeClipboard.Call(); r == 0 {
@@ -115,12 +160,16 @@ func (c *windowsClipboard) Set(content string) error {
 	dstSlice := unsafe.Slice((*uint16)(unsafe.Pointer(ptr)), len(utf16)) //nolint:unsafeptr
 	copy(dstSlice, utf16)
 
-	if r, _, e := globalUnlock.Call(h); r == 0 {
-		c.logger.Warn("GlobalUnlock failed", "error", e)
-	}
+	c.unlockGlobal(h)
 
-	r, _, err = setClipboardData.Call(cfUnicodeText, h)
+	// On success SetClipboardData transfers ownership of h to the system, so we
+	// must NOT free it. On failure ownership stays with us and h would leak
+	// unless we free it here.
+	r, _, err := setClipboardData.Call(cfUnicodeText, h)
 	if r == 0 {
+		if r, _, e := globalFree.Call(h); r == 0 {
+			c.logger.Warn("GlobalFree failed", "error", e)
+		}
 		return fmt.Errorf("failed to set clipboard data: %w", err)
 	}
 	c.lastHash = sha256.Sum256([]byte(content)) // prevent feedback loop
