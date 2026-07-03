@@ -60,6 +60,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # full history so gitleaks can resolve the push commit range
 
       - uses: actions/setup-go@v6
         with:
