@@ -1,32 +1,32 @@
 {
-    "version": "1.0.3",
-    "description": "Secure P2P clipboard sharing and file transfer across devices on your LAN",
-    "homepage": "https://klip-it.app",
-    "license": "GPL-3.0-or-later",
-    "architecture": {
-        "64bit": {
-            "url": "https://github.com/PatrykDz95/Klip/releases/download/v1.0.3/klip-windows-amd64.zip",
-            "hash": "236126ade0af301c02d0364fc52746bb5def1d28f46b5cdefbe7a938315bcc0b",
-            "bin": [
-                [
-                    "klip-windows-amd64.exe",
-                    "klip"
-                ]
-            ],
-            "shortcuts": [
-                [
-                    "klip-windows-amd64.exe",
-                    "Klip"
-                ]
-            ]
-        }
-    },
-    "checkver": "github",
-    "autoupdate": {
-        "architecture": {
-            "64bit": {
-                "url": "https://github.com/PatrykDz95/Klip/releases/download/v$version/klip-windows-amd64.zip"
-            }
-        }
+  "version": "1.0.4",
+  "description": "Secure P2P clipboard sharing and file transfer across devices on your LAN",
+  "homepage": "https://klip-it.app",
+  "license": "GPL-3.0-or-later",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/PatrykDz95/Klip/releases/download/v1.0.4/klip-windows-amd64.zip",
+      "hash": "6b7ab4080f41b75385c1808981889c175d7159044f2c38b1b3025a1d90434c9c",
+      "bin": [
+        [
+          "klip-windows-amd64.exe",
+          "klip"
+        ]
+      ],
+      "shortcuts": [
+        [
+          "klip-windows-amd64.exe",
+          "Klip"
+        ]
+      ]
     }
+  },
+  "checkver": "github",
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/PatrykDz95/Klip/releases/download/v$version/klip-windows-amd64.zip"
+      }
+    }
+  }
 }
