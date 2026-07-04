@@ -53,15 +53,36 @@ The free version supports up to 2 devices. [Klip Pro](https://klip-it.app/#prici
 ## Installation
 
 ### Homebrew (macOS & Linux) — recommended
+Requires [Homebrew](https://brew.sh). Install and run:
 ```bash
 brew install PatrykDz95/tap/klip
+klip
 ```
 Homebrew builds Klip from source on your machine, so on macOS the binary is **not quarantined and Gatekeeper never blocks it** — no "Open Anyway" step needed.
 
+> Recent Homebrew versions require you to trust third-party taps. If the install is refused with a tap-trust message, run:
+> ```bash
+> brew trust --formula PatrykDz95/tap/klip
+> ```
+> then re-run the install.
+
+To update later:
+```bash
+brew update && brew upgrade klip
+```
+
 ### Scoop (Windows)
+If you don't have [Scoop](https://scoop.sh) yet, install it first (PowerShell, no admin needed):
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm get.scoop.sh | iex
+```
+Then install and run Klip:
 ```powershell
 scoop install https://raw.githubusercontent.com/PatrykDz95/Klip/master/packaging/scoop/klip.json
+klip
 ```
+Windows SmartScreen may warn on first run because the app is unsigned — click **More info → Run anyway** (see the antivirus note below).
 
 ### Manual download
 Download the latest release from the [Releases page](https://github.com/PatrykDz95/Klip/releases/latest).
