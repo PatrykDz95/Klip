@@ -1,6 +1,6 @@
 module klip
 
-go 1.25.11
+go 1.25.12
 
 require (
 	github.com/gen2brain/beeep v0.11.2
