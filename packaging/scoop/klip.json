@@ -1,12 +1,12 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Secure P2P clipboard sharing and file transfer across devices on your LAN",
   "homepage": "https://klip-it.app",
   "license": "GPL-3.0-or-later",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/PatrykDz95/Klip/releases/download/v1.0.5/klip-windows-amd64.zip",
-      "hash": "529c7d252f77421eaedce40359481ba7da24dd19a2b93b25d76430352be33477",
+      "url": "https://github.com/PatrykDz95/Klip/releases/download/v1.0.6/klip-windows-amd64.zip",
+      "hash": "4135902f0a0e9fbed504e2300b8a13136a4c1225f0b986b152d9f99bf5dfddf7",
       "bin": [
         [
           "klip-windows-amd64.exe",
