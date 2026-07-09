@@ -31,6 +31,9 @@ type Application struct {
 	clipboardClearCancel context.CancelFunc
 	clipboardClearMu     sync.Mutex
 
+	dialBackoff   map[string]*dialAttempt
+	dialBackoffMu sync.Mutex
+
 	paused   bool
 	pausedMu sync.RWMutex
 
@@ -41,7 +44,8 @@ type Application struct {
 
 func NewApplication(iconData []byte) *Application {
 	return &Application{
-		iconData: iconData,
+		iconData:    iconData,
+		dialBackoff: make(map[string]*dialAttempt),
 		ui: &UI{
 			peers: make(map[string]peerEntry),
 		},

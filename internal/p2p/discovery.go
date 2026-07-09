@@ -97,12 +97,20 @@ func (d *Discovery) scan(ctx context.Context) {
 	entriesCh := make(chan *mdns.ServiceEntry, 10)
 
 	go func() {
+		// mdns.Query can emit many (often cached) records for the same peer within
+		// a single scan window. Dedup per scan so one discovery event is sent per
+		// peer instead of flooding the consumer with hundreds of duplicates.
+		seen := make(map[string]bool)
 		for entry := range entriesCh {
 			// Ignore self
 			deviceID := extractField(entry.InfoFields, "device_id")
 			if deviceID == "" || deviceID == d.deviceID {
 				continue
 			}
+			if seen[deviceID] {
+				continue
+			}
+			seen[deviceID] = true
 
 			addr := fmt.Sprintf("%s:%d", entry.AddrV4, entry.Port)
 			select {
