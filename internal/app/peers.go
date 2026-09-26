@@ -30,20 +30,20 @@ func (app *Application) handlePeerDiscovered(peerID, addr string) {
 	}
 
 	if !app.isPro() && len(app.p2pMgr.GetPeers()) >= maxFreeDevices {
-		app.logger.Warn("Free version limited to 2 devices")
-		app.updateStatus("Free limit reached - Upgrade to Pro")
-		dialog.Message("You've reached the free limit of 2 devices.\n\nUpgrade to Klip Pro for unlimited devices.").
-			Title("Klip - Device Limit Reached").Info()
+		app.showDeviceLimitNotice()
 		return
 	}
 
-	if !app.shouldAttemptDial(peerID) {
-		app.logger.Debug("Skipping peer dial (backoff active)", "peer_id", peerID)
+	if !app.beginDial(peerID) {
+		app.logger.Debug("Skipping peer dial (in progress or backoff active)", "peer_id", peerID)
 		return
 	}
+	defer app.endDial(peerID)
 
 	app.logger.Info("Discovered new peer", "peer_id", peerID, "addr", addr)
 
+	// Connect returns only when the session ends (or fails to start), so the
+	// code below runs after disconnect, not after connect.
 	if err := app.p2pMgr.Connect(peerID, addr); err != nil {
 		app.recordDialFailure(peerID, err)
 		return
@@ -53,13 +53,44 @@ func (app *Application) handlePeerDiscovered(peerID, addr string) {
 	app.updatePeerMenu()
 }
 
-// shouldAttemptDial reports whether enough time has passed since the last failed
-// dial to this peer to try again (or if we've never failed).
-func (app *Application) shouldAttemptDial(peerID string) bool {
+// showDeviceLimitNotice tells the user about the free-tier limit. The dialog
+// is shown only once per run; discovery keeps finding the same peers every
+// few seconds and would otherwise stack up dialogs.
+func (app *Application) showDeviceLimitNotice() {
+	app.updateStatus("Free limit reached - Upgrade to Pro")
+	if !app.limitNoticeShown.CompareAndSwap(false, true) {
+		app.logger.Debug("Free device limit reached, not dialing")
+		return
+	}
+	app.logger.Warn("Free version limited to 2 devices")
+	dialog.Message("You've reached the free limit of 2 devices.\n\nUpgrade to Klip Pro for unlimited devices.").
+		Title("Klip - Device Limit Reached").Info()
+}
+
+// beginDial reports whether we may dial peerID now and, if so, marks the dial
+// as in progress. Check and mark happen under one lock so two concurrent
+// discovery events can't both start a dial to the same peer.
+// Every successful beginDial must be paired with endDial.
+func (app *Application) beginDial(peerID string) bool {
 	app.dialBackoffMu.Lock()
 	defer app.dialBackoffMu.Unlock()
-	att, ok := app.dialBackoff[peerID]
-	return !ok || time.Now().After(att.nextAttempt)
+
+	if app.dialing[peerID] {
+		return false
+	}
+	if att, ok := app.dialBackoff[peerID]; ok && time.Now().Before(att.nextAttempt) {
+		return false
+	}
+	app.dialing[peerID] = true
+	return true
+}
+
+// endDial clears the in-progress mark set by beginDial.
+func (app *Application) endDial(peerID string) {
+	app.dialBackoffMu.Lock()
+	defer app.dialBackoffMu.Unlock()
+
+	delete(app.dialing, peerID)
 }
 
 // recordDialFailure grows the exponential backoff for a peer and logs the first
@@ -96,6 +127,7 @@ func (app *Application) recordDialSuccess(peerID string) {
 
 // isDeviceLimitBlocked reports whether the free-tier limit is currently exceeded.
 // Computed live from the connected peer count so it self-corrects when a peer
+// disconnects — there is no stored flag that could get stuck.
 func (app *Application) isDeviceLimitBlocked() bool {
 	return !app.isPro() && len(app.p2pMgr.GetPeers()) > maxFreeDevices
 }

@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -31,8 +32,14 @@ type Application struct {
 	clipboardClearCancel context.CancelFunc
 	clipboardClearMu     sync.Mutex
 
+	// dialBackoffMu guards both dialBackoff and dialing.
 	dialBackoff   map[string]*dialAttempt
+	dialing       map[string]bool // peers with a Connect currently in progress
 	dialBackoffMu sync.Mutex
+
+	// limitNoticeShown ensures the free-tier dialog is shown once per run
+	// instead of on every discovery scan.
+	limitNoticeShown atomic.Bool
 
 	paused   bool
 	pausedMu sync.RWMutex
@@ -46,6 +53,7 @@ func NewApplication(iconData []byte) *Application {
 	return &Application{
 		iconData:    iconData,
 		dialBackoff: make(map[string]*dialAttempt),
+		dialing:     make(map[string]bool),
 		ui: &UI{
 			peers: make(map[string]peerEntry),
 		},
@@ -188,7 +196,9 @@ func (app *Application) startServices(cfg *Config, deviceID string) error {
 			case <-app.ctx.Done():
 				return
 			case peer := <-app.discovery.Peers:
-				app.handlePeerDiscovered(peer.DeviceID, peer.Address)
+				// Connect blocks for the whole session, so it must not run on
+				// this loop — otherwise discovery stalls after the first peer.
+				go app.handlePeerDiscovered(peer.DeviceID, peer.Address)
 			}
 		}
 	}()
