@@ -149,25 +149,58 @@ jobs:
           generate_release_notes: true
           files: artifacts/*
 
-  # Updates the Homebrew tap formula (url + sha256) to the new tag.
-  # Skipped until the HOMEBREW_TAP_TOKEN secret is set, so it never fails a
-  # release before the tap exists. Requires a PAT with contents+PR write on
-  # the PatrykDz95/homebrew-tap repo.
+  # Updates the Homebrew tap formula (url + sha256) to the new tag and pushes
+  # it straight to the tap's default branch — no PR to merge, so the formula
+  # can't silently fall behind. Skipped until the HOMEBREW_TAP_TOKEN secret is
+  # set. Requires a PAT with Contents: read and write on PatrykDz95/homebrew-tap.
   bump-homebrew:
     needs: release
     runs-on: ubuntu-latest
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      FORMULA: Formula/klip.rb
     steps:
-      - name: Bump Homebrew tap formula
+      - uses: actions/checkout@v5
         if: env.HOMEBREW_TAP_TOKEN != ''
-        env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-        uses: dawidd6/action-homebrew-bump-formula@v8
         with:
+          repository: PatrykDz95/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: PatrykDz95/homebrew-tap
-          formula: klip
-          tag: ${{ github.ref_name }}
-          no_fork: true
+          path: tap
+
+      - name: Update formula
+        if: env.HOMEBREW_TAP_TOKEN != ''
+        working-directory: tap
+        run: |
+          set -euo pipefail
+          VER="${GITHUB_REF_NAME#v}"
+          CURRENT="$(sed -nE 's#^  url ".*/v([^/]+)\.tar\.gz"$#\1#p' "$FORMULA")"
+          if [ -z "$CURRENT" ]; then
+            echo "::error::Could not read current version from $FORMULA"; exit 1
+          fi
+
+          # Never move the formula backwards (e.g. a mistyped older tag).
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$VER" | sort -V | tail -n1)" != "$VER" ]; then
+            echo "Formula is at $CURRENT, not downgrading to $VER"; exit 0
+          fi
+
+          URL="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          HASH="$(curl -fsSL "$URL" | sha256sum | awk '{print $1}')"
+
+          sed -i -E \
+            -e "s#^  url \".*\"\$#  url \"${URL}\"#" \
+            -e "s#^  sha256 \".*\"\$#  sha256 \"${HASH}\"#" \
+            "$FORMULA"
+
+          if git diff --quiet -- "$FORMULA"; then
+            echo "Formula already at ${VER}"; exit 0
+          fi
+          git diff -- "$FORMULA"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$FORMULA"
+          git commit -m "klip ${VER}"
+          git push
 
   # Updates the Scoop manifest (version + url + sha256) in this repo and pushes
   # it back to master. The manifest lives here (not a separate bucket), so the
