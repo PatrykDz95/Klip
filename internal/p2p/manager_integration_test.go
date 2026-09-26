@@ -42,14 +42,17 @@ func (h *integrationEventHandler) DecisionCalls() int {
 func newIntegrationManager(t *testing.T, certRoot, deviceID, deviceName string, events EventHandler) *Manager {
 	t.Helper()
 
-	certDir := filepath.Join(certRoot, deviceID)
-	cert, err := security.GenerateSelfSignedCert(certDir, deviceID)
+	// Each device gets its own directory for cert and trust store, like
+	// ~/.klip-sync on a real machine. Reusing the same root + deviceID
+	// simulates restarting the app; a different root simulates a reinstall.
+	configDir := filepath.Join(certRoot, deviceID)
+	cert, err := security.GenerateSelfSignedCert(configDir, deviceID)
 	if err != nil {
 		t.Fatalf("GenerateSelfSignedCert failed: %v", err)
 	}
 
 	port := freePort(t)
-	mgr := NewManager(deviceID, deviceName, port, cert, slog.New(slog.NewTextHandler(io.Discard, nil)), events)
+	mgr := NewManager(deviceID, deviceName, port, configDir, cert, slog.New(slog.NewTextHandler(io.Discard, nil)), events)
 	if err := mgr.Listen(); err != nil {
 		t.Fatalf("Listen failed: %v", err)
 	}
@@ -119,9 +122,6 @@ func connectAsync(m *Manager, peerID, addr string) <-chan error {
 }
 
 func TestManagerTOFUPersistsPeerFingerprintOnFirstConnect(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
 	certRoot := filepath.Join(t.TempDir(), "certs")
 	hA := &integrationEventHandler{}
 	hB := &integrationEventHandler{}
@@ -155,9 +155,6 @@ func TestManagerTOFUPersistsPeerFingerprintOnFirstConnect(t *testing.T) {
 }
 
 func TestManagerRejectsPeerOnFingerprintMismatch(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
 	certRoot := filepath.Join(t.TempDir(), "certs")
 	hA := &integrationEventHandler{decisionResult: false}
 	hB := &integrationEventHandler{}
@@ -209,9 +206,6 @@ func TestManagerRejectsPeerOnFingerprintMismatch(t *testing.T) {
 }
 
 func TestManagerAcceptsPeerOnFingerprintMismatchWhenApproved(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
 	certRoot := filepath.Join(t.TempDir(), "certs")
 	hA := &integrationEventHandler{decisionResult: true}
 	hB := &integrationEventHandler{}

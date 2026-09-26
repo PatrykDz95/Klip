@@ -23,13 +23,10 @@ type peerTrustStore struct {
 	peers map[string]trustedPeerRecord
 }
 
-func newPeerTrustStore() (*peerTrustStore, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home: %w", err)
-	}
-
-	configDir := filepath.Join(home, ".klip-sync")
+// newPeerTrustStore opens (or creates) trusted_peers.json inside configDir.
+// The directory is passed in rather than derived from the user's home so
+// callers — tests in particular — control where trust state lives.
+func newPeerTrustStore(configDir string) (*peerTrustStore, error) {
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		return nil, fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -67,6 +64,10 @@ func (s *peerTrustStore) load() error {
 }
 
 func (s *peerTrustStore) saveLocked() error {
+	if s.path == "" {
+		return nil // in-memory store (see NewManager fallback): nothing to persist
+	}
+
 	data, err := json.MarshalIndent(s.peers, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to encode trust store: %w", err)

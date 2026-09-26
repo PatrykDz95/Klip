@@ -60,12 +60,14 @@ type PeerTrustDecision struct {
 	PeerFingerprint    string
 }
 
-func NewManager(deviceID, deviceName string, port int, cert *tls.Certificate, logger *slog.Logger, events EventHandler) *Manager {
+// NewManager creates a p2p manager. configDir is where persistent state
+// (trusted_peers.json) is kept.
+func NewManager(deviceID, deviceName string, port int, configDir string, cert *tls.Certificate, logger *slog.Logger, events EventHandler) *Manager {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
-	trustStore, err := newPeerTrustStore()
+	trustStore, err := newPeerTrustStore(configDir)
 	if err != nil {
 		logger.Warn("Failed to initialize peer trust store, using in-memory trust only", "error", err)
 		trustStore = &peerTrustStore{peers: make(map[string]trustedPeerRecord)}
