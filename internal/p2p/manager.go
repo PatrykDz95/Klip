@@ -247,8 +247,8 @@ func (m *Manager) handleConnection(conn net.Conn, initiator bool, peerFingerprin
 		return fmt.Errorf("failed to decode message: %w", err)
 	}
 
-	if msg.DeviceID == "" {
-		return fmt.Errorf("invalid message: missing device ID")
+	if err := msg.validate(); err != nil {
+		return fmt.Errorf("invalid message from %s: %w", conn.RemoteAddr(), err)
 	}
 
 	deviceName := ""
@@ -318,10 +318,6 @@ func (m *Manager) verifyPeerTrust(deviceID, deviceName, fingerprint string) erro
 }
 
 func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.Encoder, decoder *json.Decoder, initiator bool) error {
-	if msg.DeviceID == "" || msg.Payload == nil || msg.Payload.DeviceName == "" {
-		return fmt.Errorf("invalid hello: missing required fields")
-	}
-
 	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
 		return fmt.Errorf("failed to parse remote address: %w", err)
@@ -368,6 +364,10 @@ func (m *Manager) handlePeerSession(conn net.Conn, msg *Message, encoder *json.E
 		if err := decoder.Decode(&mMsg); err != nil {
 			m.logger.Debug("Peer disconnected", "peer", peer.DeviceName, "error", err)
 			return nil
+		}
+		if err := mMsg.validate(); err != nil {
+			m.logger.Warn("Ignoring invalid message", "peer", peer.DeviceName, "error", err)
+			continue
 		}
 		if mMsg.Type == MsgTypeSync && m.events != nil {
 			m.events.OnMessage(&mMsg)

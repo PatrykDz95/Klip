@@ -4,12 +4,18 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/tls"
+	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"klip/internal/security"
 )
 
 func newTestManager(t *testing.T) *Manager {
@@ -128,5 +134,45 @@ func TestExtractTarGzExtractsRegularFile(t *testing.T) {
 	}
 	if string(data) != "hello" {
 		t.Fatalf("unexpected file content: got %q", string(data))
+	}
+}
+
+// A file_offer without a payload used to reach handleFileOffer and panic on a
+// nil pointer, killing the whole process (any host on the LAN could do it).
+// It must now be rejected by validate(), before the sender gets trusted.
+func TestManagerRejectsFileOfferWithoutPayload(t *testing.T) {
+	root := t.TempDir()
+	m := newIntegrationManager(t, root, "dev-a", "Device A", &integrationEventHandler{})
+
+	clientCert, err := security.GenerateSelfSignedCert(filepath.Join(root, "attacker"), "attacker")
+	if err != nil {
+		t.Fatalf("GenerateSelfSignedCert failed: %v", err)
+	}
+
+	conn, err := tls.Dial("tcp", managerAddr(m), &tls.Config{
+		Certificates:       []tls.Certificate{*clientCert},
+		InsecureSkipVerify: true,
+		MinVersion:         tls.VersionTLS13,
+	})
+	if err != nil {
+		t.Fatalf("dial failed: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if _, err := io.WriteString(conn, `{"type":"file_offer","device_id":"attacker"}`+"\n"); err != nil {
+		t.Fatalf("write failed: %v", err)
+	}
+
+	// The manager must close the connection. A timeout means it is still
+	// waiting on us, i.e. the malformed offer was not rejected.
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, err = conn.Read(make([]byte, 1))
+	var netErr net.Error
+	if err == nil || (errors.As(err, &netErr) && netErr.Timeout()) {
+		t.Fatalf("expected manager to close the connection, got: %v", err)
+	}
+
+	if _, trusted := m.trustStore.Get("attacker"); trusted {
+		t.Fatalf("sender of an invalid message must not be added to the trust store")
 	}
 }

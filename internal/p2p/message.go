@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -81,4 +82,28 @@ func ReadFileHeader(r io.Reader) (int64, error) {
 		return 0, fmt.Errorf("invalid file size: %d", size)
 	}
 	return size, nil
+}
+
+func (m *Message) validate() error {
+	if m.DeviceID == "" {
+		return errors.New("missing device_id")
+	}
+	switch m.Type {
+	case MsgTypeHello:
+		if m.Payload == nil || m.Payload.DeviceName == "" {
+			return errors.New("hello: missing device name")
+		}
+	case MsgTypeFileOffer:
+		if m.Payload == nil || m.Payload.FileName == "" {
+			return errors.New("file_offer: missing file name")
+		}
+		if m.Payload.Size < 0 {
+			return fmt.Errorf("file_offer: invalid size %d", m.Payload.Size)
+		}
+	case MsgTypeSync:
+		if m.Payload == nil {
+			return errors.New("sync: missing payload")
+		}
+	}
+	return nil
 }
